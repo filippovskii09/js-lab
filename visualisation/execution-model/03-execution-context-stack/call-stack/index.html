@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Call Stack (LIFO) & Execution Context</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .js-lab-stack {
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+            align-items: center !important;
+            padding: 15px !important;
+            overflow-y: auto !important;
+            background: #fff !important;
+        }
+
+        .js-lab-stack-title {
+            margin-bottom: 10px !important;
+            font-size: 16px !important;
+            color: #2c3e50 !important;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+
+        .stack-glass {
+            display: flex;
+            flex-direction: column-reverse;
+            justify-content: flex-start;
+            border-left: 3px solid #3498db;
+            border-right: 3px solid #3498db;
+            border-bottom: 3px solid #3498db;
+            border-radius: 0 0 12px 12px;
+            padding: 10px 15px;
+            background: rgba(52, 152, 219, 0.03);
+            min-height: 480px;
+            width: 100%;
+            max-width: 500px;
+            gap: 12px;
+            position: relative;
+            margin-top: 35px;
+            box-shadow: inset 0 -10px 20px rgba(52, 152, 219, 0.05);
+            box-sizing: border-box;
+            flex-shrink: 0;
+        }
+        
+        .stack-label {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-weight: bold;
+            color: #2980b9;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            font-size: 11px;
+            opacity: 0.8;
+        }
+
+        .ec-frame {
+            background: #fff;
+            border: 2px solid #3498db;
+            border-radius: 8px;
+            padding: 12px;
+            width: 100%;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            transform: translateY(-50px);
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.1);
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        }
+
+        .ec-frame.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .ec-frame.popped {
+            opacity: 0;
+            transform: translateY(-80px) scale(0.95);
+            pointer-events: none;
+        }
+
+        .ec-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 6px;
+            margin-bottom: 10px;
+        }
+
+        .ec-title {
+            font-weight: bold;
+            font-size: 13px;
+            color: #2980b9;
+            text-transform: none;
+        }
+
+        .ec-type {
+            font-size: 9px;
+            text-transform: uppercase;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-weight: bold;
+            background: #3498db;
+            color: #fff;
+        }
+
+        .type-global { background: #e67e22; color: #fff; }
+        .type-function { background: #3498db; color: #fff; }
+        
+        .type-active { border-color: #2ecc71; box-shadow: 0 0 15px rgba(46, 204, 113, 0.3); }
+        .type-active .ec-header { border-bottom-color: #2ecc71; }
+        .type-active .ec-title { color: #27ae60; }
+        .type-active .ec-type { background: #2ecc71; }
+
+        .ec-records {
+            font-family: 'Consolas', monospace;
+            font-size: 11px;
+            color: #34495e;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 3px 12px;
+        }
+        
+        .ec-records span:nth-child(odd) {
+            color: #7f8c8d;
+            font-weight: normal;
+        }
+        
+        .ec-records span:nth-child(even) {
+            font-weight: bold;
+        }
+
+        .stack-arrow {
+            position: absolute;
+            left: -20px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #3498db;
+            font-size: 16px;
+            animation: bounceLeft 1s infinite alternate;
+        }
+
+        @keyframes bounceLeft {
+            0% { transform: translate(0, -50%); }
+            100% { transform: translate(-4px, -50%); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>The Call Stack (Execution Context Stack)</h2>
+    <p>Візуалізація принципу LIFO (Last-In-First-Out) під час синхронного виконання функцій у V8</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 7</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 0.9;">
+            <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">funcB</span>() {</div>
+            <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span>  <span class="kw">let</span> <span class="var">b</span> <span class="op">=</span> <span class="str">"Hello B"</span>;</div>
+            <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">b</span>);</div>
+            <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span>}</div>
+            <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span></div>
+            <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span><span class="kw">function</span> <span class="fn">funcA</span>() {</div>
+            <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>  <span class="kw">let</span> <span class="var">a</span> <span class="op">=</span> <span class="str">"Hello A"</span>;</div>
+            <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>  <span class="fn">funcB</span>();</div>
+            <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span>}</div>
+            <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span></div>
+            <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span><span class="kw">let</span> <span class="var">globalVar</span> <span class="op">=</span> <span class="str">"Global"</span>;</div>
+            <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span><span class="fn">funcA</span>(); <span class="com">// Старт</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК -->
+        <div class="js-lab-stack" style="flex: 1.1;">
+            <div class="js-lab-stack-title">Execution Context (Call Stack)</div>
+            
+            <div class="stack-glass" id="theStack">
+                <div class="stack-label">Storage (LIFO)</div>
+                <!-- Контексти будуть рендеритись тут знизу вверх -->
+                
+                <div class="ec-frame visible" id="ec-global">
+                    <div class="ec-header">
+                        <div class="ec-title">Global Execution Context</div>
+                        <div class="ec-type type-global">GEC</div>
+                    </div>
+                    <div class="ec-records">
+                        <span>globalVar:</span><span style="color:#27ae60">"Global"</span>
+                        <span>this:</span><span style="color:#e74c3c">window</span>
+                    </div>
+                </div>
+                
+                <div class="ec-frame" id="ec-funcA">
+                    <div class="stack-arrow" id="arrow-a" style="display:none">▶</div>
+                    <div class="ec-header">
+                        <div class="ec-title">funcA() Execution Context</div>
+                        <div class="ec-type type-function">FEC</div>
+                    </div>
+                    <div class="ec-records">
+                        <span>a:</span><span style="color:#27ae60">"Hello A"</span>
+                        <span>[[OuterEnv]]:</span><span style="color:#7f8c8d; font-style: italic;">Global Environment</span>
+                    </div>
+                </div>
+                
+                <div class="ec-frame" id="ec-funcB">
+                    <div class="stack-arrow" id="arrow-b" style="display:none">▶</div>
+                    <div class="ec-header">
+                        <div class="ec-title">funcB() Execution Context</div>
+                        <div class="ec-type type-function">FEC</div>
+                    </div>
+                    <div class="ec-records">
+                        <span>b:</span><span style="color:#27ae60">"Hello B"</span>
+                        <span>[[OuterEnv]]:</span><span style="color:#7f8c8d; font-style: italic;">Global Environment</span>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Що відбувається:</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Чому так:</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Інсайт:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function markActive(id) {
+        document.querySelectorAll('.ec-frame').forEach(f => {
+            f.classList.remove('type-active');
+            const arrow = f.querySelector('.stack-arrow');
+            if(arrow) arrow.style.display = 'none';
+        });
+        const target = document.getElementById(id);
+        if(target) {
+            target.classList.add('type-active');
+            const arrow = target.querySelector('.stack-arrow');
+            if(arrow) arrow.style.display = 'block';
+        }
+    }
+    
+    function setVisibility(id, state) {
+        const el = document.getElementById(id);
+        if(state === 'visible') {
+            el.classList.remove('popped');
+            el.classList.add('visible');
+        } else if (state === 'popped') {
+            el.classList.add('popped');
+            el.classList.remove('visible');
+        } else {
+            el.classList.remove('popped');
+            el.classList.remove('visible');
+        }
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'l11',
+                action: () => {
+                    setVisibility('ec-funcA', 'hidden');
+                    setVisibility('ec-funcB', 'hidden');
+                    markActive('ec-global');
+                },
+                narration: {
+                    title: "1. Global Execution Context",
+                    what: "При старті скрипта рушій V8 відразу ініціалізує Global Execution Context (GEC) і кладе його в самий низ Call Stack.",
+                    why: "Будь-якому коду потрібна 'сцена' для виконання. Глобальний контекст створює глобальний об'єкт (window/global) і дозволяє системі почати читання файлу рядок за рядком.",
+                    insight: "GEC ніколи не втікає зі стеку доти, поки ви не закриєте вкладку браузера або не зупините Node.js процес."
+                }
+            },
+            {
+                codeLine: 'l12',
+                action: () => {
+                    setVisibility('ec-funcA', 'hidden');
+                    setVisibility('ec-funcB', 'hidden');
+                    markActive('ec-global');
+                },
+                narration: {
+                    title: "2. Виклик функції funcA()",
+                    what: "На 12 рядку ми кажемо рушію: 'Зупини виконання глобального коду і йди виконувати функцію funcA'.",
+                    why: "JavaScript не може виконувати дві речі одночасно (Single-threaded). Щоб виконати функцію, він має поставити поточний контекст 'на паузу'.",
+                    insight: "Саме виклик функції через круглі дужки () є тригером `Call`, який сигналізує процесору про зміну контексту."
+                }
+            },
+            {
+                codeLine: 'l6',
+                action: () => {
+                    setVisibility('ec-funcA', 'visible');
+                    setVisibility('ec-funcB', 'hidden');
+                    markActive('ec-funcA');
+                },
+                narration: {
+                    title: "3. Створення Function Execution Context",
+                    what: "Створюється новий Function Execution Context (FEC) для `funcA` і вставляється всередину Стеку (операція PUSH).",
+                    why: "Зараз активним (тим, хто керує процесором) є лише верхній елемент стека (funcA). Глобальний контекст під ним лежить у стані 'заморозки' (suspended).",
+                    insight: "Зверніть увагу: Стек працює за принципом LIFO — 'Останній прийшов, першим пішов'. Функція, що зайшла останньою, керує процесором."
+                }
+            },
+            {
+                codeLine: 'l8',
+                action: () => {
+                    setVisibility('ec-funcB', 'hidden');
+                    markActive('ec-funcA');
+                },
+                narration: {
+                    title: "4. Вкладений виклик funcB()",
+                    what: "Рядок 8. Всередині funcA ми зустрічаємо ще один виклик `funcB()`.",
+                    why: "Правила діють так само: рушій має поставити на паузу поточний контекст (funcA) і підготувати нову 'сцену' для funcB.",
+                    insight: "Такі вкладеності викликів формують стек. Максимальна глибина стеку у V8 обмежена (близько 10 000 фреймів). Якщо викликати функцію в циклі саму в собі, виникне Stack Overflow."
+                }
+            },
+            {
+                codeLine: 'l1',
+                action: () => {
+                    setVisibility('ec-funcB', 'visible');
+                    markActive('ec-funcB');
+                },
+                narration: {
+                    title: "5. PUSH: Контекст funcB() на верхівці",
+                    what: "Створено FEC для `funcB` і операцією PUSH додано на верхівку Call Stack. Тепер саме `funcB` містить активний Control Flow.",
+                    why: "Уважно подивіться на [[OuterEnv]]. В обох функцій він вказує на Global, бо вони ОБИДВІ оголошені в глобал скоупі. АЛЕ в стеку funcB лежить над funcA. Стек визначає порядок виконання, а LexEnv — видимість змінних!",
+                    insight: "Не плутайте Стек викликів і Scope Chain. Стек — це 'хто за ким працює'. Scope Chain — це 'хто чиї змінні бачить'."
+                }
+            },
+            {
+                codeLine: 'l4',
+                action: () => {
+                    setVisibility('ec-funcB', 'popped');
+                    markActive('ec-funcA');
+                },
+                narration: {
+                    title: "6. POP: Завершення funcB()",
+                    what: "Функція `funcB` виконала свій останній рядок і досягла `}`. Відбувається операція POP — контекст функціоналу руйнується і викидається зі стеку.",
+                    why: "Після видалення верхнього фрейму, активним знову автоматично стає той, що лежить під ним (funcA). Його стан 'розморожується' рівно з того рядка (8), де він зупинився.",
+                    insight: "Уся пам'ять з цього контексту (змінна b) знищується збірником сміття, ОКРІМ тих випадків, коли ця пам'ять збережена як замикання (Closure) в Heap."
+                }
+            },
+            {
+                codeLine: 'l9',
+                action: () => {
+                    setVisibility('ec-funcA', 'popped');
+                    setVisibility('ec-funcB', 'popped');
+                    markActive('ec-global');
+                },
+                narration: {
+                    title: "7. POP: Завершення funcA()",
+                    what: "Аналогічно `funcA` закінчує свою роботу. Операція POP знімає фрейм `funcA` зі стека.",
+                    why: "Єдиним активним знову залишається Global Execution Context. Він чекає на нові команди, перетворення Promise'ів з Event Loop тощо.",
+                    insight: "Саме так виглядає життєвий цикл синхронного виконання JavaScript. Розуміючи Стек, ви без проблем зрозумієте, як працюють Callbacks, Promise та Async/Await."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
