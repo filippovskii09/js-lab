@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Stack vs Heap Allocation</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .memory-panel {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            margin-top: 15px;
+        }
+        
+        .mem-col {
+            flex: 1;
+            background: #fff;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+        }
+        
+        .stack-col { border: 2px solid #3498db; }
+        .heap-col { border: 2px solid #9b59b6; }
+        
+        .col-title {
+            text-align: center;
+            font-weight: bold;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ecf0f1;
+            text-transform: uppercase;
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+        .stack-col .col-title { color: #2980b9; }
+        .heap-col .col-title { color: #8e44ad; }
+        
+        .ec-block {
+            border: 2px solid #bdc3c7;
+            border-radius: 6px;
+            padding: 10px;
+            background: #fdfefe;
+        }
+        
+        .ec-header {
+            font-size: 12px;
+            font-weight: bold;
+            color: #7f8c8d;
+            margin-bottom: 8px;
+            border-bottom: 1px dashed #bdc3c7;
+            padding-bottom: 4px;
+        }
+        
+        .memory-slot {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            border: 1px solid #dcdde1;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            opacity: 0;
+            transform: translateX(-10px);
+            transition: all 0.3s ease;
+            margin-bottom: 6px;
+        }
+        .memory-slot.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .memory-slot.active {
+            border-color: #f1c40f;
+            box-shadow: 0 0 8px rgba(241, 196, 15, 0.4);
+            background: #fef9e7;
+        }
+        
+        .slot-key { color: #2c3e50; font-weight: bold; }
+        .slot-val-prim { color: #27ae60; }
+        .slot-val-ref { color: #8e44ad; font-weight: bold; background: rgba(142, 68, 173, 0.1); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(142, 68, 173, 0.3); }
+        .slot-val-uninit { color: #e74c3c; font-style: italic; }
+
+        .heap-object {
+            background: rgba(155, 89, 182, 0.05);
+            border: 2px dashed #9b59b6;
+            border-radius: 6px;
+            padding: 12px;
+            opacity: 0;
+            transform: translateX(10px);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .heap-object.visible {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        .heap-object.active {
+            background: rgba(155, 89, 182, 0.15);
+            border-style: solid;
+            box-shadow: 0 0 12px rgba(155, 89, 182, 0.3);
+        }
+        
+        .heap-address {
+            position: absolute;
+            top: -10px;
+            right: 15px;
+            font-size: 11px;
+            font-family: 'Consolas', monospace;
+            background: #9b59b6;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .heap-props {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 6px 12px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .heap-props span:nth-child(odd) { color: #d35400; font-weight: bold; }
+        .heap-props span:nth-child(even) { color: #27ae60; }
+        
+        /* SVG Connecting Lines Placeholder */
+        .pointers-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Stack vs Heap: Memory Allocation</h2>
+    <p>Візуалізація поділу пам'яті на Примітиви (Stack) та Посилання (Heap)</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 0.8;">
+            <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">age</span> <span class="op">=</span> <span class="str">30</span>;</div>
+            <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span><span class="kw">let</span> <span class="var">isDev</span> <span class="op">=</span> <span class="kw">true</span>;</div>
+            <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span></div>
+            <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>  <span class="var">name</span>: <span class="str">"Artur"</span>,</div>
+            <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>  <span class="var">role</span>: <span class="str">"Admin"</span></div>
+            <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>};</div>
+            <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span></div>
+            <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span><span class="kw">let</span> <span class="var">copyAge</span> <span class="op">=</span> <span class="var">age</span>;</div>
+            <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span><span class="kw">const</span> <span class="var">userRef</span> <span class="op">=</span> <span class="var">user</span>;</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="memory-panel" style="flex: 1.2;">
+            <!-- STACK -->
+            <div class="mem-col stack-col">
+                <div class="col-title">Stack Memory (Execution Context)</div>
+                <div class="ec-block">
+                    <div class="ec-header">Global Environment Record</div>
+                    
+                    <div class="memory-slot" id="slot-age">
+                        <span class="slot-key">age</span>
+                        <span class="slot-val-prim" id="val-age">30</span>
+                    </div>
+                    
+                    <div class="memory-slot" id="slot-isDev">
+                        <span class="slot-key">isDev</span>
+                        <span class="slot-val-prim" id="val-isDev">true</span>
+                    </div>
+                    
+                    <div class="memory-slot" id="slot-user">
+                        <span class="slot-key">user</span>
+                        <span class="slot-val-ref" id="val-user">&lt;0xAD42&gt;</span>
+                    </div>
+
+                    <div class="memory-slot" id="slot-copyAge">
+                        <span class="slot-key">copyAge</span>
+                        <span class="slot-val-prim" id="val-copyAge">30</span>
+                    </div>
+                    
+                    <div class="memory-slot" id="slot-userRef">
+                        <span class="slot-key">userRef</span>
+                        <span class="slot-val-ref" id="val-userRef">&lt;0xAD42&gt;</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- HEAP -->
+            <div class="mem-col heap-col">
+                <div class="col-title">Heap Memory (Dynamic Allocation)</div>
+                
+                <div class="heap-object" id="obj-user">
+                    <div class="heap-address">0xAD42</div>
+                    <div style="font-weight:bold; color:#8e44ad; font-size:12px;">Object</div>
+                    <div class="heap-props">
+                        <span>name:</span> <span>"Artur"</span>
+                        <span>role:</span> <span>"Admin"</span>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Що відбувається:</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Чому так:</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Інсайт:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function setVisibility(id, isVisible) {
+        const el = document.getElementById(id);
+        if (isVisible) el.classList.add('visible');
+        else el.classList.remove('visible');
+    }
+
+    function setActive(id, isActive) {
+        document.querySelectorAll('.active').forEach(el => el.classList.remove('active'));
+        if (isActive) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('active');
+        }
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => {
+                    ['slot-age', 'slot-isDev', 'slot-user', 'slot-copyAge', 'slot-userRef', 'obj-user'].forEach(id => setVisibility(id, false));
+                    setActive(null, false);
+                },
+                narration: {
+                    title: "1. Ініціалізація виконання",
+                    what: "Двигун V8 підготував дві області пам'яті: Stack (Стек) та Heap (Купа).",
+                    why: "Стек потрібен для швидкого доступу та зберігання контекстів виконання. Купа — для динамічних об'єктів невизначеного розміру.",
+                    insight: "Stack Memory завжди лінійна, впорядкована і надшвидка. Heap Memory — це хаотична 'куча' адрес, доступ до якої вимагає обчислень."
+                }
+            },
+            {
+                codeLine: 'l1',
+                action: () => {
+                    setVisibility('slot-age', true);
+                    setActive('slot-age', true);
+                },
+                narration: {
+                    title: "2. Збереження Примітиву (Number)",
+                    what: "Змінна `age` (число 30) зберігається БЕЗПОСЕРЕДНЬО в Стеку (у поточному Environment Record).",
+                    why: "Усі примітиви (Number, String, Boolean, Null, Undefined) мають фіксований розмір. Двигун V8 точно знає, скільки байтів під них потрібно, тому кладе їх прямо в лінійну пам'ять.",
+                    insight: "Технічно V8 використовує оптимізацію SMI (Small Integer) для чисел типу віку, кодуючи їх прямо в самій адресі (покажчику) для максимальної швидкості."
+                }
+            },
+            {
+                codeLine: 'l2',
+                action: () => {
+                    setVisibility('slot-age', true);
+                    setVisibility('slot-isDev', true);
+                    setActive('slot-isDev', true);
+                },
+                narration: {
+                    title: "3. Збереження Примітиву (Boolean)",
+                    what: "Змінна `isDev` також розміщується прямо в Stack.",
+                    why: "Boolean — це примітив, який займає фіксоване і дуже мале місце у пам'яті.",
+                    insight: "Доступ до значень у Стеку відбувається практично миттєво, бо процесор точно знає їх зсув (offset) у пам'яті."
+                }
+            },
+            {
+                codeLine: 'l4',
+                action: () => {
+                    setVisibility('slot-user', true);
+                    setVisibility('obj-user', true);
+                    setActive('obj-user', true);
+                },
+                narration: {
+                    title: "4. Збереження Reference Type (Object)",
+                    what: "Під час створення `user`, сам об'єкт виділяється (Allocated) уHeap Memory за адресою `0xAD42`. А у Stack записується лише ПОСИЛАННЯ (Pointer) на цю адресу.",
+                    why: "Об'єкти можуть динамічно змінювати свій розмір (додавання властивостей). Stack працює за принципом LIFO і не може розширювати поточні записи, тому масивні дані лежать у Heap.",
+                    insight: "Коли ви пишете `user.name`, рушій спочатку знаходить змінну `user` у стеку, читає адресу `0xAD42`, і робить 'стрибок' (dereference) у Heap, щоб знайти справжні дані. Пошук по Heap завжди дорожче!"
+                }
+            },
+            {
+                codeLine: 'l9',
+                action: () => {
+                    setVisibility('slot-copyAge', true);
+                    setActive('slot-copyAge', true);
+                },
+                narration: {
+                    title: "5. Копіювання за Значенням (Pass by Value)",
+                    what: "Створюється нова змінна `copyAge`. У Stack копіюється САМЕ ЗНАЧЕННЯ `30` з існуючої змінної.",
+                    why: "Оскільки це примітив, V8 виділяє нове фізичне місце у стеку і дублює значення. Зв'язку між `age` та `copyAge` немає.",
+                    insight: "Якщо тепер ви зробите `copyAge = 40`, змінна `age` залишиться `30`. Вони повністю незалежні."
+                }
+            },
+            {
+                codeLine: 'l10',
+                action: () => {
+                    setVisibility('slot-userRef', true);
+                    setActive('slot-userRef', true);
+                    document.getElementById('obj-user').classList.add('active');
+                },
+                narration: {
+                    title: "6. Копіювання за Посиланням (Pass by Reference)",
+                    what: "Змінній `userRef` присвоїли `user`. Рушій дублює ЗНАЧЕННЯ ЗІ СТЕКУ, а в стеку у нас лежить адреса `<0xAD42>`. Об'єкт у Heap НЕ копіюється!",
+                    why: "Об'єкти великі. Копіювати мегабайтний масив при кожному присвоєнні вбило б перформанс. Тому копіюється лише вказівник. Тепер ДВІ змінні (slots) дивляться на ОДИН об'єкт в пам'яті.",
+                    insight: "Це джерело найпоширенішого багу: якщо ви зміните `userRef.name = 'Bob'`, то `user.name` теж стане 'Bob', оскільки обидві змінні посилаються на ту саму адресу в Heap."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
