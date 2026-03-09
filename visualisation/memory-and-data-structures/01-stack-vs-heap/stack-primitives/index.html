@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Stack Memory (Static Memory)</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .num { color: #d19a66; } /* Числа */
+        
+        /* Специфічні стилі для підсвітки стеку */
+        #globalEnv {
+            border-color: #3498db; 
+            background: #ebf5fb;
+        }
+        #globalEnv .env-name {
+            color: #2980b9; 
+            border-color: #3498db;
+        }
+        #globalEnv .record-zone {
+            border-color: #3498db;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Контейнер для монтування згідно зі специфікацією JSLab SDK (Senior Edition) -->
+<div id="js-lab-visualizer"></div>
+
+<!-- 2. Підключаємо Engine -->
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    // Для суворого дотримання інструкції, згідно з якою HTML має бути максимально легким:
+    // "Згенерований index.html має містити лише <div id='js-lab-visualizer'>..."
+    // ми інжектуємо UI частину програмно перед ініціалізацією конфігу.
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>Stack Memory (Статична пам'ять)</h2>
+    <p>Стек — це надшвидка, лінійна та суворо обмежена пам'ять для примітивів фіксованого розміру.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">age</span> <span class="op">=</span> <span class="num">30</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">isDeveloper</span> <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">let</span> <span class="var">codeLabel</span> <span class="op">=</span> <span class="str">"A"</span><span class="op">;</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Execution Context Stack</div>
+            <div class="js-lab-stack-container" id="stack">
+                <div class="lexical-env slot-zone visible" id="globalEnv">
+                    <div class="env-name">Global Stack Frame <br><small style="font-size: 11px; color: #7f8c8d; font-weight: normal;">(Global Environment Record)</small></div>
+                    
+                    <div class="record-zone slot-zone">
+                        <div class="record-title">Primitives Data</div>
+                        <div class="record-table">
+                            <div>age:</div><div id="valAge" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div>isDeveloper:</div><div id="valDev" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div>codeLabel:</div><div id="valLabel" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+
+                    <div class="outer-zone slot-zone">
+                        <span>LIFO Heap Sync:</span> <span style="color:#27ae60;font-weight:bold;">Local Only (Values)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    // 3. Збираємо об'єкт конфігурації (Специфікація SDK)
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                state: {
+                    stack: [
+                        { type: 'Global', records: { age: '<uninitialized>', isDeveloper: '<uninitialized>', codeLabel: '<uninitialized>' } }
+                    ],
+                    heap: {}
+                },
+                narration: {
+                    title: "Creation Phase (Аналіз та резерв)",
+                    what: "Двигун виділяє Global Stack Frame. Ідентифікатори 'age', 'isDeveloper', 'codeLabel' зареєстровані, але знаходяться у Temporal Dead Zone (TDZ).",
+                    why: "На етапі компіляції V8 ідентифікує декларації. На відміну від 'var', 'let' та 'const' не ініціалізуються 'undefined'. Це запобігає випадковому використанню до привласнення.",
+                    insight: "Стек не розширюється динамічно. V8 створює 'коробки' ідеального розміру під змінні-примітиви ще до виконання рядків, знаючи їх жорсткий формат."
+                },
+                action: () => {
+                    document.getElementById('valAge').innerText = '<uninitialized>';
+                    document.getElementById('valAge').className = 'val-uninit';
+                    document.getElementById('valDev').innerText = '<uninitialized>';
+                    document.getElementById('valDev').className = 'val-uninit';
+                    document.getElementById('valLabel').innerText = '<uninitialized>';
+                    document.getElementById('valLabel').className = 'val-uninit';
+                }
+            },
+            {
+                codeLine: 'line1',
+                state: {
+                    stack: [
+                        { type: 'Global', records: { age: 30, isDeveloper: '<uninitialized>', codeLabel: '<uninitialized>' } }
+                    ],
+                    heap: {}
+                },
+                narration: {
+                    title: "Ініціалізація числа (SMI/Primitive)",
+                    what: "Значення 30 записано безпосередньо в Стек (у Environment Record). Змінна 'age' вийшла з TDZ.",
+                    why: "Число у JS (за спец. стандарту IEEE 754) завжди займає 64 біти. Двигун кладе це значення прямо в попередньо виділену комірку (Стек), уникаючи Купи.",
+                    insight: "V8 оптимізує цілі числа до 31 біта, зберігаючи їх як SMI (Small Integers). Значення '30' не просто лежить у стеку, воно зашите прямо у сам адресний вказівник (pointer tagging) для гіпершвидкого доступу!"
+                },
+                action: () => {
+                    document.getElementById('valAge').innerText = '30';
+                    document.getElementById('valAge').className = 'val-primitive';
+                }
+            },
+            {
+                codeLine: 'line2',
+                state: {
+                    stack: [
+                        { type: 'Global', records: { age: 30, isDeveloper: true, codeLabel: '<uninitialized>' } }
+                    ],
+                    heap: {}
+                },
+                narration: {
+                    title: "Ініціалізація Boolean (Pass-by-Value)",
+                    what: "Булевий примітив 'true' записано в Стек.",
+                    why: "Boolean займає ще менше місця і повністю влазить у структуру стека. Немає жодної необхідності створювати посилання (pointer).",
+                    insight: "Примітиви у Стеку повністю ізольовані. Якби ви написали 'let copy = isDeveloper;', Стек виділив би абсолютно нову та незалежну коробку зі значенням 'true', скопіювавши значення (Pass-by-Value)."
+                },
+                action: () => {
+                    document.getElementById('valDev').innerText = 'true';
+                    document.getElementById('valDev').className = 'val-primitive';
+                }
+            },
+            {
+                codeLine: 'line3',
+                state: {
+                    stack: [
+                        { type: 'Global', records: { age: 30, isDeveloper: true, codeLabel: '"A"' } }
+                    ],
+                    heap: {}
+                },
+                narration: {
+                    title: "Ініціалізація String (Short String Оптимізація)",
+                    what: "Текстовий примітив 'A' збережено для змінної 'codeLabel'.",
+                    why: "Хоча рядки концептуально є безрозмірними і великі рядки технічно можуть зберігатися у Heap з посиланням на них, JavaScript поводиться з ними як із математичними примітивами.",
+                    insight: "V8 оптимізує короткі рядки. Внутрішня репрезентація 'A' може вписуватися безпосередньо у стек (чи пул констант), абсолютно уникаючи повільної алокації у Heap (пам'яті спільного користування)."
+                },
+                action: () => {
+                    document.getElementById('valLabel').innerText = '"A"';
+                    document.getElementById('valLabel').className = 'val-primitive';
+                }
+            }
+        ]
+    };
+
+    // 4. Ініціалізуємо рушій
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

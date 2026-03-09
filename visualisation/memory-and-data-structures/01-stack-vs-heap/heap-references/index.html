@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Heap Memory (Dynamic Memory)</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .num { color: #d19a66; } /* Числа */
+        
+        /* Специфічні стилі для підсвітки стеку і купи */
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        #globalEnv .record-zone { border-color: #3498db; }
+        
+        .val-ref-address { color: #8e44ad; font-weight: bold; background: #f4ecf7; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        
+        .heap-obj { display: none; border-color: #9b59b6; background: #faf5fb; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #8e44ad; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #d2b4de; padding-bottom: 5px; margin-bottom: 8px; }
+        
+        #heap-container { 
+            border-color: #e67e22; 
+            background: #fdfefe;
+            align-items: stretch;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<!-- 2. Підключаємо Engine -->
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>Heap Memory (Динамічна пам'ять)</h2>
+    <p>Купа — це велика, неструктурована область пам'яті для зберігання динамічних структур (Об'єктів, Масивів, Функцій).</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 3</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.2;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  name: <span class="str">"Artur"</span>,</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  role: <span class="str">"Admin"</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>}<span class="op">;</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="kw">const</span> <span class="var">permissions</span> <span class="op">=</span> [<span class="str">"READ"</span>, <span class="str">"WRITE"</span>]<span class="op">;</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК ТА КУПА -->
+        <div style="display: flex; flex-direction: column; gap: 15px; flex: 1.8;">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: unset; padding: 15px; min-height: 160px;">
+                <div class="js-lab-stack-title" style="margin-bottom: 10px; font-size: 14px;">Stack (Environment Record)</div>
+                <div class="js-lab-stack-container" id="stack" style="max-width: 100%;">
+                    <div class="lexical-env slot-zone visible" id="globalEnv" style="margin-bottom: 0;">
+                        <div class="record-table">
+                            <div style="font-weight:bold;">user:</div><div id="valUser" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div style="font-weight:bold;">permissions:</div><div id="valPerms" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heap -->
+            <div class="js-lab-stack" id="heap-container" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; margin-bottom: 10px; font-size: 14px;">Heap Memory (Nursery Generation)</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; max-width: 100%; gap: 10px;">
+                    
+                    <div id="heapUser" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0x1034f40d2 <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>name:</div><div class="val-primitive">"Artur"</div>
+                            <div>role:</div><div class="val-primitive">"Admin"</div>
+                        </div>
+                    </div>
+
+                    <div id="heapPerms" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0x88f1a2b0c <span style="color:#7f8c8d;font-size:11px;">(Array)</span></div>
+                        <div class="record-table">
+                            <div>0:</div><div class="val-primitive">"READ"</div>
+                            <div>1:</div><div class="val-primitive">"WRITE"</div>
+                            <div style="color:#e67e22;">length:</div><div class="val-primitive">2</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                state: {
+                    stack: [{ type: 'Global', records: { user: '<uninitialized>', permissions: '<uninitialized>' } }],
+                    heap: {}
+                },
+                narration: {
+                    title: "Creation Phase (Пре-Алокація)",
+                    what: "Ідентифікатори 'user' та 'permissions' зареєстровано в Global Environment Record у стані TDZ. Heap поки що абсолютно порожній.",
+                    why: "На етапі компіляції рушій не виділяє пам'ять у Heap для значень, він лише готує Environment Record у Стеку для майбутніх змінних. Значення 'const' потрапляють в Temporal Dead Zone.",
+                    insight: "Пошук вільних блоків пам'яті у Heap — дорога і повільна операція (через фрагментацію). V8 відкладає створення об'єктів рівно до того моменту, поки не почнеться виконання (Execution Phase)."
+                },
+                action: () => {
+                    document.getElementById('valUser').innerText = '<uninitialized>';
+                    document.getElementById('valUser').className = 'val-uninit';
+                    document.getElementById('valPerms').innerText = '<uninitialized>';
+                    document.getElementById('valPerms').className = 'val-uninit';
+                    
+                    document.getElementById('heapUser').classList.remove('visible');
+                    document.getElementById('heapPerms').classList.remove('visible');
+                }
+            },
+            {
+                codeLine: ['line1', 'line2', 'line3', 'line4'],
+                state: {
+                    stack: [{ type: 'Global', records: { user: '<ref: 0x1034f>', permissions: '<uninitialized>' } }],
+                    heap: { '0x1034f': { name: 'Artur', role: 'Admin' } }
+                },
+                narration: {
+                    title: "Алокація Об'єкта (Nursery Generation)",
+                    what: "V8 знаходить блобі в Heap, виділяє там пам'ять для об'єкта {name, role} і генерує адресу (0x1034f...). Стек зберігає ЛИШЕ вказівник на неї.",
+                    why: "Об'єкт може розширюватися: ми можемо динамічно додати user.age=30 завтра. Тому він лягає у 'безрозмірний' Heap. У Stack фіксується фіксований 64-бітний Pointer (посилання).",
+                    insight: "Усі новозбудовані об'єкти потрапляють у частину Heap під назвою Nursery (Young Generation). Туди дані пишуться дуже швидко лінійним додаванням (bump-pointer allocation)."
+                },
+                action: () => {
+                    document.getElementById('valUser').innerHTML = '&lt;ref: <span class="val-ref-address">0x1034f40d2</span>&gt;';
+                    document.getElementById('valUser').className = 'val-reference';
+                    document.getElementById('valPerms').innerText = '<uninitialized>';
+                    document.getElementById('valPerms').className = 'val-uninit';
+                    
+                    document.getElementById('heapUser').classList.add('visible');
+                    document.getElementById('heapPerms').classList.remove('visible');
+                }
+            },
+            {
+                codeLine: 'line6',
+                state: {
+                    stack: [{ type: 'Global', records: { user: '<ref: 0x1034f>', permissions: '<ref: 0x88f1a>' } }],
+                    heap: { '0x1034f': { name: 'A...', role: 'A...' }, '0x88f1a': { 0: 'READ', 1: 'WRITE', length: 2 } }
+                },
+                narration: {
+                    title: "Алокація Масиву (Array is Object)",
+                    what: "V8 розміщує масив ['READ', 'WRITE'] в Heap. Стек отримує посилання на адресу цього масиву (0x88f1a...).",
+                    why: "У JavaScript масиви — це насправді просто специфічні об'єкти (з числовими ключами і властивістю length). Тому вони також зберігаються виключно в Heap і передаються за Reference.",
+                    insight: "Оскільки 'permissions' та 'user' живуть у Heap, зміна їхніх властивостей через інші змінні призведе до спільної мутації (Mutation). Саме тому в JS постійно використовують Spread оператор {...user}."
+                },
+                action: () => {
+                    document.getElementById('valUser').innerHTML = '&lt;ref: <span class="val-ref-address">0x1034f40d2</span>&gt;';
+                    document.getElementById('valUser').className = 'val-reference';
+                    document.getElementById('valPerms').innerHTML = '&lt;ref: <span class="val-ref-address">0x88f1a2b0c</span>&gt;';
+                    document.getElementById('valPerms').className = 'val-reference';
+                    
+                    document.getElementById('heapUser').classList.add('visible');
+                    document.getElementById('heapPerms').classList.add('visible');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
