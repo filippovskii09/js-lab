@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Declaration Instantiation: Creation vs Execution</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .phase-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-right: 10px;
+        }
+        .phase-creation { background: #e8daef; color: #8e44ad; }
+        .phase-execution { background: #d5f5e3; color: #27ae60; }
+        
+        .memory-layout {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+        }
+        
+        .col-env {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .val-table {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 6px;
+            font-size: 13px;
+            align-items: center;
+        }
+        .val-table > div:nth-child(odd) {
+            color: #7f8c8d;
+            font-family: 'Consolas', monospace;
+        }
+        
+        .scanner-beam {
+            position: absolute;
+            left: -5px;
+            width: 10px;
+            height: 20px;
+            background: #8e44ad;
+            box-shadow: 0 0 10px #8e44ad, 0 0 20px #8e44ad;
+            border-radius: 5px;
+            transition: top 0.3s linear, opacity 0.3s;
+            opacity: 0;
+            z-index: 10;
+        }
+        
+        .js-lab-code { position: relative; }
+        .tdz-glow {
+            animation: pulse-red 2s infinite;
+        }
+        @keyframes pulse-red {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); border-color: #e74c3c; }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); border-color: #34495e; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Declaration Instantiation (Створення та Підняття)</h2>
+    <p>Візуалізація: Як рушій JS сканує код та розподіляє пам'ять ДО того, як почне його виконувати</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 0.9;">
+            <div id="scanner" class="scanner-beam"></div>
+            <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">name</span> <span class="op">=</span> <span class="str">'Artur'</span>;</div>
+            <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span><span class="fn">console</span>.<span class="fn">log</span>(<span class="var">age</span>); <span class="com">// undefined</span></div>
+            <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span><span class="kw">var</span> <span class="var">age</span> <span class="op">=</span> <span class="str">25</span>;</div>
+            <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span></div>
+            <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span><span class="fn">greet</span>(); <span class="com">// 'Hello'</span></div>
+            <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span><span class="kw">function</span> <span class="fn">greet</span>() {</div>
+            <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>  <span class="com">/*...*/</span></div>
+            <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span>}</div>
+            <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span></div>
+            <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span><span class="fn">console</span>.<span class="fn">log</span>(<span class="var">futureName</span>); <span class="com">// TDZ!</span></div>
+            <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span><span class="kw">let</span> <span class="var">futureName</span> <span class="op">=</span> <span class="str">'Test'</span>;</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="js-lab-stack" style="flex: 1.1;">
+            <div style="margin-bottom: 10px;">
+                <span id="badgeCreate" class="phase-badge phase-creation" style="opacity:1;">Creation Phase (Скан)</span>
+                <span id="badgeExec" class="phase-badge phase-execution" style="opacity:0.3;">Execution Phase (Виконання)</span>
+            </div>
+            
+            <div class="memory-layout">
+                <div class="col-env">
+                    <div class="lexical-env slot-zone visible" id="envRecord" style="border-width:2px;">
+                        <div class="env-name" style="font-weight:bold;">Global Environment Record</div>
+                        <div class="record-zone slot-zone">
+                            <div class="val-table">
+                                <div id="k-name">name <i>(let)</i>:</div><div id="v-name" style="color:transparent;">--</div>
+                                <div id="k-age">age <i>(var)</i>:</div><div id="v-age" style="color:transparent;">--</div>
+                                <div id="k-greet">greet <i>(fn)</i>:</div><div id="v-greet" style="color:transparent;">--</div>
+                                <div id="k-fut">futureName <i>(let)</i>:</div><div id="v-fut" style="color:transparent;">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function setVal(id, cls, text) {
+        const el = document.getElementById(id);
+        el.className = cls;
+        el.innerText = text;
+        el.style.color = '';
+    }
+    
+    function scan(line) {
+        const sc = document.getElementById('scanner');
+        sc.style.opacity = 1;
+        // height is roughly line-height or top padding
+        sc.style.top = ((line - 1) * 21 + 10) + 'px'; 
+    }
+    
+    function setPhase(phase) {
+        if(phase === 'create') {
+            document.getElementById('badgeCreate').style.opacity = 1;
+            document.getElementById('badgeExec').style.opacity = 0.3;
+            document.getElementById('envRecord').style.borderColor = '#8e44ad';
+        } else {
+            document.getElementById('badgeCreate').style.opacity = 0.3;
+            document.getElementById('badgeExec').style.opacity = 1;
+            document.getElementById('envRecord').style.borderColor = '#27ae60';
+        }
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => {
+                    setPhase('create');
+                    scan(1);
+                    setVal('v-name', '', '--'); 
+                    document.getElementById('v-name').style.color = 'transparent';
+                    setVal('v-age', '', '--'); 
+                    document.getElementById('v-age').style.color = 'transparent';
+                    setVal('v-greet', '', '--'); 
+                    document.getElementById('v-greet').style.color = 'transparent';
+                    setVal('v-fut', '', '--'); 
+                    document.getElementById('v-fut').style.color = 'transparent';
+                    document.getElementById('envRecord').classList.remove('tdz-glow');
+                },
+                narration: {
+                    title: "1. Старт: Creation Phase (Фаза Створення)",
+                    what: "Перед тим як виконати хоча б один рядок коду, рушій V8 вмикає внутрішній сканер (парсер). Йде процес GlobalDeclarationInstantiation.",
+                    why: "Цей алгоритм потрібен, щоб підготувати пам'ять. Рушій мусить знати заздалегідь вісь список змінних у поточному блоці (Environment Record), щоб правильно налаштувати область видимості.",
+                    insight: "Саме завдяки цьому скрипти JS є нелінійними — ви можете використовувати функцію до того, як її оголосили фізично в тексті файлу."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                    setPhase('create');
+                    scan(7);
+                    setVal('v-name', 'val-uninit', '<uninitialized>'); // let
+                    setVal('v-age', 'val-primitive', 'undefined'); // var
+                    setVal('v-greet', 'val-reference', '<f: greet>'); // func
+                    setVal('v-fut', 'val-uninit', '<uninitialized>'); // let
+                    
+                    document.getElementById('v-age').style.backgroundColor = '#f1c40f44';
+                    document.getElementById('v-greet').style.backgroundColor = '#27ae6044';
+                    setTimeout(() => {
+                        document.getElementById('v-age').style.backgroundColor = 'transparent';
+                        document.getElementById('v-greet').style.backgroundColor = 'transparent';
+                    }, 1000);
+                },
+                narration: {
+                    title: "2. Сканування завершено (Hoisting)",
+                    what: "Сканер знайшов 4 декларації. Функція `greet` миттєво збереглася в пам'ять повністю. Змінна `age` (var) отримала значення `undefined`. А от `name` та `futureName` (let) отримали спеціальний статус `<uninitialized>`.",
+                    why: "Ця різниця прописана специфікацією. var і function є старим стандартом (до ES6), і вони 'піднімаються' разом зі своїм значенням чи 'undefined'. Змінні let/const теж піднімаються (хостять), але їх читання заблоковане.",
+                    insight: "Увага! Стан <uninitialized> — це не значення. Це внутрішня блокуюча помітка пам'яті, що формує 'Тимчасову мертву зону' (TDZ)."
+                }
+            },
+            {
+                codeLine: 'l1',
+                action: () => {
+                    setPhase('exec');
+                    document.getElementById('scanner').style.opacity = 0;
+                    setVal('v-name', 'val-primitive', '"Artur"'); 
+                },
+                narration: {
+                    title: "3. Execution Phase: Ініціалізація let",
+                    what: "Фаза виконання розпочалась! Рядок 1: `let name = 'Artur'`. Рушій знімає стан <uninitialized> та записує реальне значення.",
+                    why: "Тільки в момент, коли потік виконання фізично доходить до рядка з декларацією let/const, змінна 'оживає' і з неї знімається блокування TDZ.",
+                    insight: "Якщо б ми написали просто `let name;`, рушій би записав `undefined`, але стан <uninitialized> все одно зняв би!"
+                }
+            },
+            {
+                codeLine: 'l2',
+                action: () => {
+                    setPhase('exec');
+                },
+                narration: {
+                    title: "4. Execution Phase: Звернення до var",
+                    what: "Рядок 2: виклик `console.log(age)`. Рушій дивиться в Environment Record.",
+                    why: "Там лежить `undefined`, бо на Фазі 1 (Creation Phase) var автоматично зануляється. Тому в консоль просто виведеться `undefined`.",
+                    insight: "Це погана практика, яка залишена тільки для зворотної сумісності зі старим інтернетом. Більшість лінтерів забороняють читати var до його декларації."
+                }
+            },
+            {
+                codeLine: 'l5',
+                action: () => {
+                    setPhase('exec');
+                    document.getElementById('l3').classList.add('active-line');
+                    setVal('v-age', 'val-primitive', '25'); // value updated in line 3 silently, now at 5
+                },
+                narration: {
+                    title: "5. Execution Phase: Виклик функції",
+                    what: "Рядок 5: виклик `greet()`. Хоч функція написана нижче на рядку 7, вона працює бездоганно.",
+                    why: "Тому що 'Function Declaration' відрізняється від усіх. Під час 1-ї Фази вона не просто створює змінну, а й повністю записує свій код у Heap і кладе туди посилання '<f>'.",
+                    insight: "Function Expression (наприклад, `var greet = function() {}`) працювала б як звичайний var — у ній був би `undefined` і код видав би 'TypeError: greet is not a function'."
+                }
+            },
+            {
+                codeLine: 'l11',
+                action: () => {
+                    setPhase('exec');
+                    document.getElementById('l3').classList.remove('active-line');
+                    document.getElementById('envRecord').classList.add('tdz-glow');
+                    setVal('v-fut', 'val-uninit', '<uninitialized>');
+                },
+                narration: {
+                    title: "6. Тимчасова мертва зона (TDZ Crash)",
+                    what: "Рядок 11: `console.log(futureName)`. Рушій знаходить змінну у списку, але бачить стан `<uninitialized>`.",
+                    why: "Алгоритм читання зустрічає цей системний прапорець і негайно викидає ReferenceError. Цей захисний механізм називається Temporal Dead Zone.",
+                    insight: "Тимчасова мертва зона вимірюється в часі (Temporal), а не в рядках коду! Якщо б ми звернулись до futureName з асинхронного setTimeout (який відпрацює ПІСЛЯ рядка 12), помилки б не було."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
