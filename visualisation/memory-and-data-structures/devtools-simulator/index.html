@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Chrome DevTools: Memory Simulator</title>
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        .kw { color: #c678dd; }
+        .fn { color: #61afef; }
+        
+        .devtools-panel {
+            background: #242424;
+            border-radius: 6px;
+            border: 1px solid #444;
+            color: #ccc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 250px;
+        }
+
+        .dt-header {
+            background: #333;
+            padding: 5px 10px;
+            font-size: 12px;
+            border-bottom: 1px solid #444;
+            display: flex;
+            gap: 15px;
+        }
+        
+        .dt-tab {
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 3px;
+        }
+        .dt-tab.active {
+            background: #555;
+            color: white;
+        }
+
+        .dt-body {
+            flex: 1;
+            padding: 10px;
+            position: relative;
+            overflow-y: auto;
+        }
+
+        .dt-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+        .dt-table th, .dt-table td {
+            text-align: left;
+            padding: 4px 8px;
+            border-bottom: 1px solid #333;
+        }
+        .dt-table th { color: #888; border-bottom: 1px solid #444; }
+        .dt-table tr:hover { background: #333; }
+
+        .dt-row { display: none; opacity: 0; transition: opacity 0.5s; }
+        .dt-row.visible { display: table-row; opacity: 1; }
+        
+        .hl-red { color: #ff5252; font-weight: bold; background: rgba(255,82,82,0.1); padding: 2px 4px; border-radius: 2px; }
+        .hl-yellow { color: #ffd600; font-weight: bold; background: rgba(255,214,0,0.1); padding: 2px 4px; border-radius: 2px; }
+
+        .timeline-chart {
+            display: none;
+            height: 120px;
+            width: 100%;
+            border-bottom: 1px solid #444;
+            border-left: 1px solid #444;
+            position: relative;
+            margin-top: 10px;
+            align-items: flex-end;
+            padding-left: 5px;
+            gap: 2px;
+        }
+        .timeline-chart.visible { display: flex; }
+
+        .bar {
+            width: 15px;
+            background: #00bcd4;
+            transition: height 0.5s;
+            border-top: 2px solid #0097a7;
+        }
+        .bar.gc-run {
+            background: #ffc107;
+            border-top: 2px solid #ffa000;
+        }
+
+        .chart-label {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            font-size: 10px;
+            color: #888;
+        }
+
+        /* Heap Visualizer Stack Style Fix */
+        .js-lab-stack { margin: 0; }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>Chrome DevTools: Memory Simulator</h2>
+    <p>Виявлення витоків пам'яті (Detached DOM Tree) та аналіз Allocation Timeline.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.1;">
+            <div class="js-lab-line" id="line1"><span class="com">// DOM Leak Example</span></div>
+            <div class="js-lab-line" id="line2"><span class="kw">let</span> <span class="var">leakedNodes</span> <span class="op">=</span> []<span class="op">;</span></div>
+            <div class="js-lab-line" id="line3"></div>
+            <div class="js-lab-line" id="line4"><span class="kw">function</span> <span class="fn">mountComponent</span>() {</div>
+            <div class="js-lab-line" id="line5">  <span class="kw">const</span> <span class="var">div</span> <span class="op">=</span> <span class="var">document</span>.<span class="fn">createElement</span>(<span class="str">'div'</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line6">  <span class="var">div</span>.innerHTML <span class="op">=</span> <span class="str">"Heavy Component"</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line7">  </div>
+            <div class="js-lab-line" id="line8">  <span class="var">document</span>.<span class="var">body</span>.<span class="fn">appendChild</span>(<span class="var">div</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line9">  </div>
+            <div class="js-lab-line" id="line10">  <span class="com">// Помилка: Зберігаємо посилання глобально</span></div>
+            <div class="js-lab-line" id="line11">  <span class="var">leakedNodes</span>.<span class="fn">push</span>(<span class="var">div</span>)<span class="op">;</span> </div>
+            <div class="js-lab-line" id="line12">}</div>
+            <div class="js-lab-line" id="line13"></div>
+            <div class="js-lab-line" id="line14"><span class="kw">function</span> <span class="fn">unmountComponent</span>() {</div>
+            <div class="js-lab-line" id="line15">  <span class="var">document</span>.<span class="var">body</span>.<span class="fn">innerHTML</span> <span class="op">=</span> <span class="str">""</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line16">  <span class="com">// Забули: leakedNodes.length = 0;</span></div>
+            <div class="js-lab-line" id="line17">}</div>
+        </div>
+
+        <div style="flex: 1.9;">
+            <!-- Chrome DevTools Simulator -->
+            <div class="devtools-panel">
+                <div class="dt-header">
+                    <div class="dt-tab active" id="tabHeap">Heap Snapshot</div>
+                    <div class="dt-tab" id="tabTimeline">Allocation Timeline</div>
+                </div>
+                <div class="dt-body">
+                    
+                    <!-- Table View (Heap Snapshot) -->
+                    <table class="dt-table" id="heapTable">
+                        <thead>
+                            <tr>
+                                <th>Constructor</th>
+                                <th>Distance</th>
+                                <th>Shallow Size</th>
+                                <th>Retained Size</th>
+                            </tr>
+                        </thead>
+                        <tbody id="heapTbody">
+                            <!-- Rows -->
+                            <tr class="dt-row" id="rowWindow">
+                                <td>▸ Window</td>
+                                <td>1</td>
+                                <td>592 B</td>
+                                <td>14 KB</td>
+                            </tr>
+                            <tr class="dt-row" id="rowSystem">
+                                <td>▸ (system)</td>
+                                <td>-</td>
+                                <td>431 KB</td>
+                                <td>812 KB</td>
+                            </tr>
+                            <tr class="dt-row" id="rowDetached" style="background: rgba(255,82,82,0.05);">
+                                <td class="hl-red">▼ Detached HTMLDivElement</td>
+                                <td>3</td>
+                                <td>144 B</td>
+                                <td class="hl-yellow">8,452 KB</td>
+                            </tr>
+                            <tr class="dt-row" id="rowDetachedDetails" style="background: rgba(255,82,82,0.05);">
+                                <td colspan="4" style="padding-left: 20px; font-family: monospace; color: #aaa;">
+                                    ↳ in Array @103517 <br>
+                                    &nbsp;&nbsp;&nbsp;↳ in <span class="hl-yellow">leakedNodes</span> @99871 (Global)
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <!-- Timeline View -->
+                    <div class="timeline-chart" id="timelineChart">
+                        <div class="chart-label">JS Heap Memory (MB) vs Time</div>
+                        <div class="bar" style="height: 20%;"></div>
+                        <div class="bar" style="height: 40%;"></div>
+                        <div class="bar" style="height: 60%;"></div>
+                        <div class="bar gc-run" style="height: 30%;"></div>
+                        <div class="bar" style="height: 50%;"></div>
+                        <div class="bar" style="height: 70%;"></div>
+                        <div class="bar" style="height: 90%;"></div>
+                        <div class="bar gc-run" style="height: 40%;"></div>
+                    </div>
+                    
+                </div>
+            </div>
+
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Шукаємо:</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">DevTools Tool:</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: ['line4', 'line8', 'line11'],
+                narration: {
+                    title: "Монтування компонента (Mount)",
+                    what: "Функція створює DOM-вузол `div`, додає його на сторінку, але також ЗАПИСУЄ посилання на нього у глобальний масив `leakedNodes`.",
+                    why: "Робота з DOM завжди потребує обережності. Тепер на цей `div` вказують два GC Roots: власне DOM-дерево браузера (document.body) і глобальна змінна (світ JS).",
+                    insight: "Поки вузол є на екрані, все гаразд. Але подвійні посилання — це бомба уповільненої дії."
+                },
+                action: () => {
+                    document.getElementById('rowWindow').classList.remove('visible');
+                    document.getElementById('rowSystem').classList.remove('visible');
+                    document.getElementById('rowDetached').classList.remove('visible');
+                    document.getElementById('rowDetachedDetails').classList.remove('visible');
+                    
+                    document.getElementById('heapTable').style.display = 'table';
+                    document.getElementById('timelineChart').classList.remove('visible');
+                    
+                    document.getElementById('tabHeap').className = 'dt-tab active';
+                    document.getElementById('tabTimeline').className = 'dt-tab';
+                }
+            },
+            {
+                codeLine: ['line14', 'line15'],
+                narration: {
+                    title: "Демонтування (Unmount) та Витік",
+                    what: "Ми очищуємо `document.body`. Вузол зникає з екрана. Але ми ЗАБУЛИ видалити його з JS-масиву `leakedNodes`.",
+                    why: "Браузер намагається видалити цей вузол під час збору сміття. Але збирач (GC) бачить, що глобальний масив `leakedNodes` усе ще 'тримає' (retains) посилання на нього.",
+                    insight: "Ця ситуація називається 'Detached DOM Tree' (Від'єднане DOM дерево). Вузол зник з екрана, але повністю залишився висіти в оперативній пам'яті (Heap) з усіма своїми даними та обробниками подій."
+                },
+                action: () => {
+                   // Just context step
+                }
+            },
+            {
+                codeLine: 'line1', // Context
+                narration: {
+                    title: "Пошук у DevTools: Heap Snapshot",
+                    what: "Ми відкриваємо DevTools -> Memory -> Heap Snapshot. Як знайти цей витік?",
+                    why: "Heap Snapshot заморожує і завантажує всю оперативну пам'ять сторінки. Ми вводимо в фільтрі слово 'Detached'. DevTools підсвічує наш HTMLDivElement червоним.",
+                    insight: "Retained Size (Утримуваний розмір) показує 8 МБ! Це означає, що якби ми 'відпустили' цей вузол, звільнилося б 8 Мегабайтів. Відкривши дерево (внизу), ми чітко бачимо 'вбивцю' — глобальний масив leakedNodes."
+                },
+                action: () => {
+                    document.getElementById('rowWindow').classList.add('visible');
+                    document.getElementById('rowSystem').classList.add('visible');
+                    
+                    setTimeout(() => {
+                        document.getElementById('rowDetached').classList.add('visible');
+                    }, 500);
+                    
+                    setTimeout(() => {
+                        document.getElementById('rowDetachedDetails').classList.add('visible');
+                    }, 1200);
+                }
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "DevTools: Allocation Timeline (Sawtooth)",
+                    what: "Альтернативний інструмент — Allocation Timeline (запис у реальному часі).",
+                    why: "Якщо ваш додаток постійно монтує та демонтує цей компонент кожну секунду, пам'ять буде невпинно рости. Графік покаже сині стовпчики алокацій, а жовті стовпчики (спрацювання GC) не зможуть очистити пам'ять до базового рівня (baseline).",
+                    insight: "Цей патерн називається 'Пила' (Sawtooth). Якщо зубці пили постійно йдуть вгору, і нижня лінія після роботи GC щораз вище попередньої — у вас 100% витік. Це найкращий спосіб зловити витік 'в русі'."
+                },
+                action: () => {
+                    document.getElementById('heapTable').style.display = 'none';
+                    document.getElementById('timelineChart').classList.add('visible');
+                    
+                    document.getElementById('tabHeap').className = 'dt-tab';
+                    document.getElementById('tabTimeline').className = 'dt-tab active';
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

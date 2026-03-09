@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Hidden Classes & Transition Trees</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        .kw { color: #c678dd; }
+        .fn { color: #61afef; }
+        
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        
+        /* Heap Objects */
+        .heap-obj { display: none; border-color: #9b59b6; background: #faf5fb; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #8e44ad; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #d2b4de; padding-bottom: 5px; margin-bottom: 8px; display: flex; justify-content: space-between;}
+        
+        .shape-tag { background: #3498db; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        .shape-dict { background: #e74c3c; color: white; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        
+        /* Transition Tree Styles */
+        #shape-container { 
+            border-color: #27ae60; 
+            background: #e9f7ef;
+            align-items: stretch;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .shape-node { display: none; border: 2px solid #27ae60; padding: 10px; margin-bottom: 10px; background: #fff; border-radius: 6px; position: relative; opacity: 0; transition: opacity 0.3s; }
+        .shape-node.visible { display: block; opacity: 1; }
+        .shape-node::before {
+            content: '↓ transition';
+            position: absolute;
+            top: -18px;
+            left: 20px;
+            color: #27ae60;
+            font-size: 11px;
+            font-weight: bold;
+            display: none;
+        }
+        .shape-node.has-parent::before { display: block; }
+        .shape-node .record-title { color: #27ae60; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #2ecc71; padding-bottom: 5px; margin-bottom: 8px; }
+
+        .mutated-val {
+            animation: highlightMutate 1s ease;
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        @keyframes highlightMutate {
+            0% { background-color: #f1c40f; color: #fff; }
+            100% { background-color: transparent; color: #e74c3c; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>V8 Hidden Classes & Transition Trees</h2>
+    <p>Візуалізація генерації Shapes (Hidden Classes) та деоптимізації у Dictionary Mode.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">p1</span> <span class="op">=</span> {}<span class="op">;</span></div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="var">p1</span>.x <span class="op">=</span> <span class="num">10</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="var">p1</span>.y <span class="op">=</span> <span class="num">20</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">const</span> <span class="var">p2</span> <span class="op">=</span> { x: <span class="num">30</span>, y: <span class="num">40</span> }<span class="op">;</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">delete</span> <span class="var">p1</span>.x<span class="op">;</span></div>
+        </div>
+
+        <div style="display: flex; gap: 15px; flex: 2;">
+            <!-- Heap -->
+            <div class="js-lab-stack" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; font-size: 14px;">Heap Memory (Instances)</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start;">
+                    
+                    <div id="heapP1" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@p1_ptr</span>
+                            <span id="p1ShapeBadge" class="shape-tag">Shape: C0</span>
+                        </div>
+                        <div class="record-table">
+                            <div id="p1xWrap" style="display:none;">[offset 0]:</div><div id="p1xVal" style="display:none;" class="val-primitive">10</div>
+                            <div id="p1yWrap" style="display:none;">[offset 1]:</div><div id="p1yVal" style="display:none;" class="val-primitive">20</div>
+                        </div>
+                    </div>
+
+                    <div id="heapP2" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@p2_ptr</span>
+                            <span class="shape-tag">Shape: C2</span>
+                        </div>
+                        <div class="record-table">
+                            <div>[offset 0]:</div><div class="val-primitive">30</div>
+                            <div>[offset 1]:</div><div class="val-primitive">40</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- V8 Hidden Classes -->
+            <div class="js-lab-stack" id="shape-container" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #27ae60; font-size: 14px;">V8 Transition Tree</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; padding-top: 15px;">
+                    
+                    <div id="shapeC0" class="shape-node block-zone">
+                        <div class="record-title">Map (Shape) C0</div>
+                        <div class="record-table" style="color: #7f8c8d; font-size: 12px;">
+                            &lt;empty shape&gt;
+                        </div>
+                    </div>
+
+                    <div id="shapeC1" class="shape-node block-zone has-parent">
+                        <div class="record-title">Map (Shape) C1</div>
+                        <div class="record-table" style="font-size: 12px;">
+                            <div>"x"</div><div>Memory Offset: 0</div>
+                        </div>
+                    </div>
+
+                    <div id="shapeC2" class="shape-node block-zone has-parent">
+                        <div class="record-title">Map (Shape) C2</div>
+                        <div class="record-table" style="font-size: 12px;">
+                            <div>"x"</div><div>Memory Offset: 0</div>
+                            <div>"y"</div><div>Memory Offset: 1</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Empty Object & Initial Shape",
+                    what: "Створено пустий об'єкт p1. V8 автоматично створює для нього базовий пустий Hidden Class (Map C0).",
+                    why: "Замість повільної хеш-таблиці, V8 призначає об'єкту посилання на 'форму' (Shape), щоб мати C++-подібну структуру в пам'яті.",
+                    insight: "Кожен об'єкт в JS під капотом має приховане посилання на свій Hidden Class (Map). Наразі об'єкт p1 має Shape C0 (порожній)."
+                },
+                action: () => {
+                    document.getElementById('heapP1').classList.add('visible');
+                    document.getElementById('shapeC0').classList.add('visible');
+                    
+                    document.getElementById('p1xWrap').style.display = 'none';
+                    document.getElementById('p1xVal').style.display = 'none';
+                    document.getElementById('p1yWrap').style.display = 'none';
+                    document.getElementById('p1yVal').style.display = 'none';
+                    
+                    document.getElementById('p1ShapeBadge').className = 'shape-tag';
+                    document.getElementById('p1ShapeBadge').innerText = 'Shape: C0';
+                    document.getElementById('shapeC1').classList.remove('visible');
+                    document.getElementById('shapeC2').classList.remove('visible');
+                    document.getElementById('heapP2').classList.remove('visible');
+                }
+            },
+            {
+                codeLine: 'line2',
+                narration: {
+                    title: "Shape Transition (Adding 'x')",
+                    what: "До об'єкта додано властивість 'x'. Shape C0 переходить (transition) у Shape C1, де зареєстровано Offset 0 для властивості 'x'.",
+                    why: "Оскільки структура об'єкта змінилася, V8 не мутує C0, а створює в дереві дочірній Map C1. Об'єкт p1 оновлює свій вказівник на C1.",
+                    insight: "Тепер значення '10' лежить у пам'яті за зміщенням (Offset) 0. Доступ obj.x тепер вираховується миттєво як (Base_Pointer + 0), маючи швидкість O(1)."
+                },
+                action: () => {
+                    document.getElementById('p1xWrap').style.display = 'block';
+                    document.getElementById('p1xVal').style.display = 'block';
+                    
+                    document.getElementById('p1ShapeBadge').innerText = 'Shape: C1';
+                    document.getElementById('shapeC1').classList.add('visible');
+                }
+            },
+            {
+                codeLine: 'line3',
+                narration: {
+                    title: "Shape Transition (Adding 'y')",
+                    what: "Додано 'y'. Створюється новий Map C2, який знає, що 'x' лежить за Offset 0, а 'y' — за Offset 1.",
+                    why: "Дерево продовжує рости: C0 -> C1 -> C2. p1 тепер вказує на Shape C2.",
+                    insight: "Переходи суворо послідовні! Якби ви додали спочатку 'y', а потім 'x', це створило б іншу гілку дерева (наприклад: C0 -> C3 -> C4). Це знищує продуктивність."
+                },
+                action: () => {
+                    document.getElementById('p1yWrap').style.display = 'block';
+                    document.getElementById('p1yVal').style.display = 'block';
+                    
+                    document.getElementById('p1ShapeBadge').innerText = 'Shape: C2';
+                    document.getElementById('shapeC2').classList.add('visible');
+                }
+            },
+            {
+                codeLine: 'line5',
+                narration: {
+                    title: "Monomorphism (Повторне використання Shape)",
+                    what: "Створено об'єкт p2 з полями {x, y}. V8 миттєво розуміє, що форма збігається з Shape C2, і просто перекористовує його!",
+                    why: "Замість створення нового дерева, дві сутності p1 і p2 тепер вказують на ОДИН Shape C2. Це називається Мономорфізм.",
+                    insight: "Саме тому оптимізатор (TurboFan) генерує ідеальний машинний код (Inline Caches), якщо ви завжди передаєте в функцію об'єкти з ідентичним порядком властивостей."
+                },
+                action: () => {
+                    document.getElementById('heapP2').classList.add('visible');
+                    document.getElementById('p1ShapeBadge').className = 'shape-tag';
+                    document.getElementById('p1ShapeBadge').innerText = 'Shape: C2';
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Deoptimization (The 'delete' Anti-pattern)",
+                    what: "Оператор delete видалив 'x'. V8 розгубився: структура об'єкта p1 зламалася і більше не відповідає дереву переходів.",
+                    why: "Оскільки p1 втратив своє зміщення Offset 0, V8 здається. Він замінює Shape на Slow Dictionary Mode (звичайну хеш-таблицю).",
+                    insight: "НІКОЛИ не використовуйте delete! Замість цього присвоюйте властивості значення null/undefined, щоб зберегти Shape (p1.x = null). Інакше швидкість доступу до об'єкта впаде в десятки разів."
+                },
+                action: () => {
+                    // Update P1 to Dictionary Mode
+                    document.getElementById('p1xWrap').style.display = 'none';
+                    document.getElementById('p1xVal').style.display = 'none';
+                    
+                    document.getElementById('p1yWrap').innerText = 'y (hash):';
+                    document.getElementById('p1yWrap').style.color = '#e74c3c';
+                    
+                    document.getElementById('p1ShapeBadge').className = 'shape-dict';
+                    document.getElementById('p1ShapeBadge').innerText = 'Slow Dictionary';
+                    
+                    document.getElementById('p1ShapeBadge').classList.add('mutated-val');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

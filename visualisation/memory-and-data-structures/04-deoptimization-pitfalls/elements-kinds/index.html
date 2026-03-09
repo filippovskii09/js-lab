@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>V8 Elements Kinds (Array Optimization)</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        .kw { color: #c678dd; }
+        .fn { color: #61afef; }
+        
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        
+        .heap-obj { display: none; border-color: #e67e22; background: #fdfefe; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #d35400; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #e67e22; padding-bottom: 5px; margin-bottom: 8px; display: flex; justify-content: space-between;}
+        
+        .type-tag { font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; color: white; transition: background 0.5s;}
+        .type-packed-smi { background: #27ae60; }
+        .type-packed-double { background: #f39c12; }
+        .type-packed { background: #e67e22; }
+        .type-holey { background: #c0392b; }
+
+        .mutated-elem {
+            animation: highlightMutate 1s ease;
+            font-weight: bold;
+        }
+
+        .holey-gap {
+            color: #bdc3c7;
+            font-style: italic;
+            background: #fdfefe;
+            border: 1px dashed #bdc3c7;
+            padding: 2px 5px;
+            font-size: 12px;
+        }
+
+        @keyframes highlightMutate {
+            0% { background-color: #f1c40f; color: #fff; }
+            100% { background-color: transparent; }
+        }
+
+        .array-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .arr-cell {
+            border: 2px solid #34495e;
+            border-radius: 4px;
+            width: 45px;
+            text-align: center;
+            background: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        .arr-cell-idx {
+            background: #bdc3c7;
+            font-size: 10px;
+            color: #2c3e50;
+            padding: 2px 0;
+            font-weight: bold;
+        }
+        .arr-cell-val {
+            padding: 5px 0;
+            font-weight: bold;
+            font-family: monospace;
+            background: #fff;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .holey-cell {
+            border-color: #e74c3c;
+            background: #fadbd8;
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>V8 Elements Kinds (Array Optimization)</h2>
+    <p>Візуалізація деоптимізації масивів: від PACKED_SMI до HOLEY_ELEMENTS.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.2;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">arr</span> <span class="op">=</span> [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]<span class="op">;</span></div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span></div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="var">arr</span>.<span class="fn">push</span>(<span class="num">4.5</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="var">arr</span>.<span class="fn">push</span>(<span class="str">'x'</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">arr</span>[<span class="num">6</span>] <span class="op">=</span> <span class="num">10</span><span class="op">;</span></div>
+        </div>
+
+        <div style="display: flex; gap: 15px; flex: 1.8; flex-direction: column;">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: unset; padding: 15px; min-height: 100px;">
+                <div class="js-lab-stack-title" style="margin-bottom: 10px; font-size: 14px;">Stack</div>
+                <div class="js-lab-stack-container" id="stack" style="max-width: 100%;">
+                    <div class="lexical-env slot-zone visible" id="globalEnv" style="margin-bottom: 0; padding: 10px;">
+                        <div class="record-table">
+                            <div style="font-weight:bold;">arr:</div><div id="valArr" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heap -->
+            <div class="js-lab-stack" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; font-size: 14px;">Heap Memory (Array Structure)</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; gap: 10px; width: 100%;">
+                    
+                    <div id="heapArray" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@Array_Ptr</span>
+                            <span id="arrTypeBadge" class="type-tag type-packed-smi">PACKED_SMI_ELEMENTS</span>
+                        </div>
+                        
+                        <div class="array-grid" id="arrayCells">
+                            <!-- Cells will be generated dynamically -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    function renderCells(elements) {
+        const container = document.getElementById('arrayCells');
+        container.innerHTML = elements.map((el, i) => {
+            if (el === 'hole') {
+                return '<div class="arr-cell holey-cell"><div class="arr-cell-idx">' + i + '</div><div class="arr-cell-val" style="color:#e74c3c;">∅</div></div>';
+            }
+            return '<div class="arr-cell"><div class="arr-cell-idx">' + i + '</div><div class="arr-cell-val mutated-elem" style="color:' + el.color + '">' + el.val + '</div></div>';
+        }).join('');
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "PACKED_SMI_ELEMENTS (Ідеал)",
+                    what: "Створено масив виключно з цілих чисел (Small Integers). V8 маркує його як PACKED_SMI_ELEMENTS.",
+                    why: "Це найкращий, найшвидший тип масиву в JavaScript. Всі елементи лежать один за одним (Packed), немає дірок, і всі вони є SMI (31-бітні цілі числа).",
+                    insight: "V8 може ігнорувати перевірки типів. Масив у пам'яті виглядає як суцільний блок чисел `[int, int, int]`, еквівалентний C++ масиву int[]. Це дає максимальну швидкість перебору."
+                },
+                action: () => {
+                    document.getElementById('valArr').innerHTML = '&lt;ref: <span style="color:#8e44ad; font-weight:bold;">0x88A1</span>&gt;';
+                    document.getElementById('valArr').className = 'val-reference';
+                    
+                    document.getElementById('heapArray').classList.add('visible');
+                    
+                    const badge = document.getElementById('arrTypeBadge');
+                    badge.className = 'type-tag type-packed-smi';
+                    badge.innerText = 'PACKED_SMI_ELEMENTS';
+                    
+                    renderCells([
+                        {val: '1', color: '#27ae60'}, 
+                        {val: '2', color: '#27ae60'}, 
+                        {val: '3', color: '#27ae60'}
+                    ]);
+                }
+            },
+            {
+                codeLine: 'line3',
+                narration: {
+                    title: "PACKED_DOUBLE_ELEMENTS (Даунгрейд 1)",
+                    what: "Додано число з плаваючою крапкою (4.5). Масив незворотно деоптимізується до PACKED_DOUBLE_ELEMENTS.",
+                    why: "Дробові числа займають 64 біти і не поміщаються в оптимізацію SMI. V8 змушений переформатувати ВЕСЬ масив, конвертуючи всі старі цілі числа (1, 2, 3) у формат рухомої крапки.",
+                    insight: "Деоптимізація — це дорога, одностороння вулиця! Транзит назад від DOUBLE до SMI ніколи не відбувається, навіть якщо ви потім видалите `4.5`."
+                },
+                action: () => {
+                    const badge = document.getElementById('arrTypeBadge');
+                    badge.className = 'type-tag type-packed-double';
+                    badge.innerText = 'PACKED_DOUBLE_ELEMENTS';
+                    
+                    renderCells([
+                        {val: '1.0', color: '#f39c12'}, 
+                        {val: '2.0', color: '#f39c12'}, 
+                        {val: '3.0', color: '#f39c12'},
+                        {val: '4.5', color: '#f39c12'}
+                    ]);
+                }
+            },
+            {
+                codeLine: 'line5',
+                narration: {
+                    title: "PACKED_ELEMENTS (Даунгрейд 2)",
+                    what: "Додано рядок 'x'. V8 здається і маркує масив загальним типом PACKED_ELEMENTS.",
+                    why: "Рядок — це об'єкт (вказівник у пам'яті). V8 більше не може зберігати масив як 'суцільний блок цифр'. Тепер кожен елемент — це просто загальний вказівник на Heap (General Pointer/Reference).",
+                    insight: "Використання змішаних масивів `[1, \"a\", true]` руйнує продуктивність арифметичних операцій. Але принаймні масив усе ще 'Packed' (упакований без дірок)."
+                },
+                action: () => {
+                    const badge = document.getElementById('arrTypeBadge');
+                    badge.className = 'type-tag type-packed';
+                    badge.innerText = 'PACKED_ELEMENTS';
+                    
+                    renderCells([
+                        {val: '1.0', color: '#e67e22'}, 
+                        {val: '2.0', color: '#e67e22'}, 
+                        {val: '3.0', color: '#e67e22'},
+                        {val: '4.5', color: '#e67e22'},
+                        {val: '"x"', color: '#e67e22'}
+                    ]);
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "HOLEY_ELEMENTS (Смерть Продуктивності)",
+                    what: "Ми встановили індекс [6] у масиві, де раніше було лише 5 елементів. З'явилася 'дірка'. Тип падає до HOLEY_ELEMENTS.",
+                    why: "V8 зустрічає 'empty' простори у масиві. Пошук по масиву тепер не просто йде по індексу: якщо ви звертаєтеся до arr[5], V8 знаходить 'дірку' і змушений виконувати обхід прототипу Array.prototype, щоб перевірити, чи немає цього ключа там!",
+                    insight: "НІКОЛИ не створюйте масиви типу `new Array(100)` або масиви з дірками: `[1, , 3]`. V8 класифікує їх як HOLEY. Будь-які маніпуляції з Holey Arrays у ~10 разів повільніші за Packed!"
+                },
+                action: () => {
+                    const badge = document.getElementById('arrTypeBadge');
+                    badge.className = 'type-tag type-holey';
+                    badge.innerText = 'HOLEY_ELEMENTS';
+                    
+                    renderCells([
+                        {val: '1.0', color: '#c0392b'}, 
+                        {val: '2.0', color: '#c0392b'}, 
+                        {val: '3.0', color: '#c0392b'},
+                        {val: '4.5', color: '#c0392b'},
+                        {val: '"x"', color: '#c0392b'},
+                        'hole',
+                        {val: '10', color: '#c0392b'}
+                    ]);
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

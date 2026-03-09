@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Mark-and-Sweep Garbage Collection</title>
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        .kw { color: #c678dd; }
+        .fn { color: #61afef; }
+        
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        
+        .web-api-env { border-color: #f39c12; background: #fdf2e9; margin-bottom: 20px; transition: all 0.3s ease; opacity: 1; }
+        .web-api-env .env-name { color: #d35400; border-color: #f39c12; }
+        .web-api-env.hidden { opacity: 0; display: none; }
+        
+        .heap-obj { display: none; border-color: #9b59b6; background: #faf5fb; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.5s ease; position: relative; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #8e44ad; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #d2b4de; padding-bottom: 5px; margin-bottom: 8px; display: flex; justify-content: space-between;}
+        
+        .reference-tag { font-family: monospace; font-size: 12px; font-weight: bold; background: #f4ecf7; padding: 2px 5px; border-radius: 4px; color: #8e44ad; }
+        
+        /* GC Marking Styles */
+        .marked-alive {
+            border-color: #27ae60 !important;
+            background: #e9f7ef !important;
+        }
+        .marked-alive .record-title {
+            color: #27ae60 !important;
+            border-bottom-color: #2ecc71 !important;
+        }
+        .marked-alive::after {
+            content: '✓ MARKED (Live)';
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: #27ae60;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            animation: popIn 0.3s ease;
+        }
+
+        .marked-dead {
+            border-color: #e74c3c !important;
+            background: #fadbd8 !important;
+            animation: shake 0.5s ease;
+        }
+        .marked-dead .record-title {
+            color: #c0392b !important;
+            border-bottom-color: #e74c3c !important;
+        }
+        .marked-dead::after {
+            content: '✗ UNREACHABLE (Dead)';
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: #e74c3c;
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .swept {
+            opacity: 0 !important;
+            transform: scale(0.9) !important;
+            pointer-events: none;
+        }
+
+        @keyframes popIn {
+            0% { transform: scale(0); opacity: 0; }
+            80% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            20% { transform: translateX(-5px); }
+            40% { transform: translateX(5px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+            100% { transform: translateX(0); }
+        }
+
+        .connection-line {
+            position: absolute;
+            width: 2px;
+            background: #3498db;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>GC: Mark-and-Sweep & Memory Leaks</h2>
+    <p>Дослідження алгоритму прибирання сміття V8. Від коренів (Roots) до знищення (Sweep) та витоків (Leaks).</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.2;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">mainApp</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  config: { theme: <span class="str">"dark"</span> }</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>}<span class="op">;</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">let</span> <span class="var">tempObj</span> <span class="op">=</span> { data: <span class="str">"Cache"</span> }<span class="op">;</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">tempObj</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span> <span class="com">// Втрата посилання!</span></div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span></div>
+            <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="com">// Memory Leak Scenario</span></div>
+            <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="fn">setInterval</span>(() <span class="op">=&gt;</span> {</div>
+            <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span>  <span class="var">console</span>.<span class="fn">log</span>(<span class="var">mainApp</span>.<span class="fn">config</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span>}, <span class="num">1000</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line13"><span class="js-lab-line-num">13</span></div>
+            <div class="js-lab-line" id="line14"><span class="js-lab-line-num">14</span><span class="var">mainApp</span> <span class="op">=</span> <span class="kw">null</span><span class="op">;</span> <span class="com">// Спроба видалити</span></div>
+        </div>
+
+        <div style="display: flex; gap: 15px; flex: 1.8; flex-direction: column;">
+            <!-- Stack / Roots -->
+            <div class="js-lab-stack" style="flex: unset; padding: 15px; min-height: 180px;">
+                <div class="js-lab-stack-title" style="margin-bottom: 10px; font-size: 14px;">GC Roots (Global Stack & Web APIs)</div>
+                <div class="js-lab-stack-container" id="stack" style="max-width: 100%; flex-wrap: wrap; flex-direction: row; gap: 10px;">
+                    
+                    <div class="lexical-env slot-zone visible" id="globalEnv" style="margin-bottom: 0; padding: 10px; min-width: 200px;">
+                        <div class="env-name">Global Environment</div>
+                        <div class="record-table">
+                            <div style="font-weight:bold;">mainApp:</div><div id="valMain" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div style="font-weight:bold;">tempObj:</div><div id="valTemp" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+
+                    <div class="lexical-env slot-zone web-api-env hidden" id="webApiEnv" style="margin-bottom: 0; padding: 10px; min-width: 200px;">
+                        <div class="env-name">Web API (Timers)</div>
+                        <div class="record-table">
+                            <div style="font-weight:bold;">setInterval:</div><div class="val-reference">&lt;Closure Ref: 0xEE99&gt;</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Heap -->
+            <div class="js-lab-stack" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; font-size: 14px;">Heap Memory</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; gap: 10px; width: 100%;">
+                    
+                    <div id="heapMain" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@0xAA11 (mainApp)</span>
+                        </div>
+                        <div class="record-table">
+                            <div>config:</div><div class="val-reference">&lt;ref: <span class="reference-tag">0xBB22</span>&gt;</div>
+                        </div>
+                    </div>
+
+                    <div id="heapConfig" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@0xBB22 (Nested.config)</span>
+                        </div>
+                        <div class="record-table">
+                            <div>theme:</div><div class="val-primitive">"dark"</div>
+                        </div>
+                    </div>
+
+                    <div id="heapTemp" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@0xCC33 (tempObj)</span>
+                        </div>
+                        <div class="record-table">
+                            <div>data:</div><div class="val-primitive">"Cache"</div>
+                        </div>
+                    </div>
+
+                    <div id="heapClosure" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">
+                            <span>@0xEE99 (Timer Closure Context)</span>
+                        </div>
+                        <div class="record-table">
+                            <div>[[OuterEnv]]:</div><div class="val-reference">&lt;ref: <span class="reference-tag">0xAA11</span>&gt;</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: ['line1', 'line2', 'line3', 'line5'],
+                narration: {
+                    title: "Ініціалізація та Досяжність (Reachability)",
+                    what: "Створено об'єкти mainApp (0xAA11) з вкладеним об'єктом (0xBB22), та tempObj (0xCC33).",
+                    why: "Усі ці об'єкти є 'Досяжними' (Reachable). Global Environment (Стек) має прямі вказівники на 0xAA11 і 0xCC33. А об'єкт 0xBB22 досягається ланцюжком через 0xAA11.",
+                    insight: "GC Roots — це стартові точки для пошуку живих об'єктів. До Roots належать Глобальний об'єкт (window), поточний Call Stack (локальні змінні активної функції) та Web APIs."
+                },
+                action: () => {
+                    document.getElementById('valMain').innerHTML = '&lt;ref: <span class="reference-tag">0xAA11</span>&gt;';  
+                    document.getElementById('valMain').className = 'val-reference';
+                    document.getElementById('valTemp').innerHTML = '&lt;ref: <span class="reference-tag">0xCC33</span>&gt;';  
+                    document.getElementById('valTemp').className = 'val-reference';
+                    
+                    document.getElementById('heapMain').classList.add('visible');
+                    document.getElementById('heapConfig').classList.add('visible');
+                    document.getElementById('heapTemp').classList.add('visible');
+                    
+                    // Reset everything
+                    document.querySelectorAll('.heap-obj').forEach(el => {
+                        el.classList.remove('marked-alive', 'marked-dead', 'swept');
+                    });
+                    document.getElementById('webApiEnv').classList.add('hidden');
+                    document.getElementById('heapClosure').classList.remove('visible');
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Втрата Посилання (Lost Reference)",
+                    what: "Змінній tempObj присвоєно null. Вказівник на 0xCC33 знищено у Стеку.",
+                    why: "Об'єкт 0xCC33 все ще фізично існує у Купі (Heap), займаючи пам'ять. Але до нього більше не можна 'дійти' (досягти) жодним шляхом від GC Roots.",
+                    insight: "Оскільки до адреси 0xCC33 немає шляхів, цей об'єкт стає кандидатом на знищення при наступному такті Garbage Collector-а."
+                },
+                action: () => {
+                    document.getElementById('valTemp').innerHTML = 'null';
+                    document.getElementById('valTemp').className = 'val-primitive';
+                    document.getElementById('heapTemp').classList.add('marked-dead');
+                }
+            },
+            {
+                codeLine: 'line7', // No new code executed, just illustrating the GC cycle
+                narration: {
+                    title: "GC: Phase 1 (Mark)",
+                    what: "Спрацьовує збирач сміття (Garbage Collector). Починається фаза Mark (Познач).",
+                    why: "GC стартує з GC Root (Global Env) і рекурсивно проходить за всіма посиланнями. Він 'фарбує' mainApp (0xAA11) та його дочірній config (0xBB22) як живі. 0xCC33 залишається непозначеним.",
+                    insight: "Ця фаза може викликати 'Stop-the-world' паузу, тому V8 робить це поступово (Incremental Marking), розбиваючи процес на шматки по кілька мілісекунд між кадрами рендеру."
+                },
+                action: () => {
+                    document.getElementById('heapMain').classList.add('marked-alive');
+                    // Add delay to show path tracing
+                    setTimeout(() => {
+                        document.getElementById('heapConfig').classList.add('marked-alive');
+                    }, 500);
+                }
+            },
+            {
+                codeLine: 'line7', 
+                narration: {
+                    title: "GC: Phase 2 (Sweep)",
+                    what: "Фаза Sweep (Замітай). Об'єкт 0xCC33 (tempObj) повністю видаляється з пам'яті.",
+                    why: "Всі об'єкти в Купі, які не отримали мітку 'живий' (Alive) на попередній фазі, фізично зачищаються. Пам'ять стає доступною для нових алокацій.",
+                    insight: "Якщо це Young Generation (молоді об'єкти), V8 використовує ще швидший алгоритм (Scavenger), просто копіюючи всі 10% живих об'єктів у нову ділянку пам'яті, залишаючи мертві гинути."
+                },
+                action: () => {
+                    document.getElementById('heapTemp').classList.add('swept');
+                }
+            },
+            {
+                codeLine: ['line10', 'line11', 'line12'],
+                narration: {
+                    title: "Створення Витоку (Memory Leak)",
+                    what: "Запущено setInterval, який використовує mainApp всередині свого CallBack.",
+                    why: "Щоб Callback міг звернутися до mainApp, він формує Замикання (Closure Context). Timer API реєструється у Web APIs (новий GC Root!), і цей Root починає тримати посилання на Context 0xEE99, який посилається на об'єкт 0xAA11.",
+                    insight: "Відтепер Таймер стає самостійним GC 'Якорем'. Поки таймер працює, усе, що лежить у його замиканні, ніколи не буде видалено."
+                },
+                action: () => {
+                    // Reset previous GC marks for clarity
+                    document.getElementById('heapMain').classList.remove('marked-alive');
+                    document.getElementById('heapConfig').classList.remove('marked-alive');
+                    
+                    document.getElementById('webApiEnv').classList.remove('hidden');
+                    document.getElementById('heapClosure').classList.add('visible');
+                    document.getElementById('heapClosure').classList.add('marked-alive');
+                }
+            },
+            {
+                codeLine: 'line14',
+                narration: {
+                    title: "Пастка Витоку (The Leak Trap)",
+                    what: "Ми виконуємо mainApp = null, намагаючись звільнити пам'ять.",
+                    why: "Посилання у Стек (Global Env) знищено. АЛЕ! GC намагається видалити 0xAA11 і бачить, що Web API Timer -> Context (0xEE99) -> 0xAA11 все ще формують шлях до об'єкта!",
+                    insight: "Це КЛАСИЧНИЙ Memory Leak (Витік Пам'яті). Об'єкт заблокований у Heap назавжди, хоча ми більше не маємо доступу до нього в глобальному коді. Рішення: Завжди робіть clearInterval(timerId) при компонентному Unmount (напр. в React useEffect)."
+                },
+                action: () => {
+                    document.getElementById('valMain').innerHTML = 'null';
+                    document.getElementById('valMain').className = 'val-primitive';
+                    
+                    document.getElementById('heapMain').classList.add('marked-alive');
+                    document.getElementById('heapConfig').classList.add('marked-alive');
+                    
+                    // Flash red to indicate it cannot be swept
+                    document.getElementById('heapMain').classList.add('mutated-val');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
