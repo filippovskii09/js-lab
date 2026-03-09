@@ -272,7 +272,7 @@ sayHello();
 Для `let` та `const` будь-яка пара фігурних дужок { ... } є окремим, ізольованим контейнером.
 
 Приклад
-```
+```javascript
 function sayHello() {
 	if (true) {
 		let greating = "Hello!"; 
@@ -301,3 +301,9 @@ sayHello();
 
 1. Код виходить з блоку `if`. Scope знищується (разом з `greating`).
 2. `console.log(greating)` шукає змінну у функції, але її там немає.
+
+TODO: 
+1. const 
+2. class hoisting 
+3. function declaration in blokcs
+4. 
