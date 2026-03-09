@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Anatomy of Lexical Environment</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../core/theme.css">
+    <style>
+        /* Специфічні стилі для підсвітки та блоків цієї візуалізації */
+        .op { color: #56b6c2; } /* Оператори */
+        
+        #greetEnv { border-color: #27ae60; background: #e9f7ef; }
+        #greetEnv .env-name { color: #27ae60; border-color: #27ae60; }
+        #greetEnv .record-zone { border-color: #27ae60; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Anatomy of Lexical Environment</h2>
+    <p>Дослідження структури: Environment Record та [[OuterEnv]]</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">appName</span> <span class="op">=</span> <span class="str">'MyApp'</span>;</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">function</span> <span class="fn">greet</span>(<span class="var">user</span>) {</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="kw">let</span> <span class="var">message</span> <span class="op">=</span> <span class="str">'Hello'</span>;</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  <span class="com">// Context: Execution point is here</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>}</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="fn">greet</span>(<span class="str">'Artur'</span>);</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Execution Context Stack</div>
+            <div class="js-lab-stack-container" id="stack">
+                
+                <!-- Global Lexical Environment -->
+                <div class="lexical-env slot-zone" id="globalEnv">
+                    <div class="env-name">Global Lexical Environment <br><small style="font-size: 11px; color: #7f8c8d; font-weight: normal;">(Global Environment Record)</small></div>
+                    
+                    <div class="record-zone slot-zone">
+                        <div class="record-title">1. Environment Record</div>
+                        <div class="record-table">
+                            <div>appName:</div><div id="valApp" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div>greet:</div><div class="val-reference">&lt;f()&gt;</div>
+                        </div>
+                    </div>
+
+                    <div class="outer-zone slot-zone">
+                        <span>2. [[OuterEnv]]:</span> <span style="color:#c0392b;font-weight:bold;">null</span>
+                    </div>
+                </div>
+
+                <!-- Greet Lexical Environment -->
+                <div class="lexical-env slot-zone" id="greetEnv">
+                    <div class="env-name">greet Lexical Environment <br><small style="font-size: 11px; color: #7f8c8d; font-weight: normal;">(Function Environment Record)</small></div>
+                    
+                    <div class="record-zone slot-zone">
+                        <div class="record-title">1. Environment Record</div>
+                        <div class="record-table">
+                            <div>user:</div><div class="val-primitive">"Artur"</div>
+                            <div>message:</div><div id="valMsg" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+
+                    <div class="outer-zone slot-zone">
+                        <span>2. [[OuterEnv]]:</span> <span style="color:#e67e22;font-weight:bold;">↓</span> <span style="color:#d35400;font-weight:bold;">Global Env</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. Підключаємо Engine -->
+<script type="module">
+    import { JSLabEngine } from '../core/engine.js';
+
+    // 3. Збираємо об'єкт конфігурації
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "Creation Phase (Глобальний контекст)",
+                    what: "Створено Global Execution Context та Global Lexical Environment. Ідентифікатори appName та greet зареєстровано в Global ER. appName знаходиться в TDZ.",
+                    why: "Під час фази компіляції рушій V8 сканує код на наявність декларацій. Функція greet повністю ініціалізується, а для let appName створюється запис <uninitialized>.",
+                    insight: "Спроба звернутися до appName зараз викличе ReferenceError через TDZ. Це захищає від доступу до неініціалізованої пам'яті."
+                },
+                action: () => {
+                    document.getElementById('globalEnv').classList.add('visible');
+                    document.getElementById('greetEnv').classList.remove('visible');
+                    
+                    document.getElementById('valApp').className = 'val-uninit';
+                    document.getElementById('valApp').innerText = '<uninitialized>';
+                }
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Етап виконання: Assignment Phase",
+                    what: "Значення 'MyApp' записано в Global Environment Record для ідентифікатора appName. Змінна вийшла з TDZ.",
+                    why: "Execution Context дійшов до рядка 1, де відбувається фізичне привласнення (Assignment Phase).",
+                    insight: "Тепер appName безпечно доступний для читання будь-якому вкладеному контексту через ланцюг Outer Reference."
+                },
+                action: () => {
+                    document.getElementById('globalEnv').classList.add('visible');
+                    document.getElementById('greetEnv').classList.remove('visible');
+                    
+                    document.getElementById('valApp').className = 'val-primitive';
+                    document.getElementById('valApp').innerText = '"MyApp"';
+                }
+            },
+            {
+                codeLine: 'line6',
+                narration: {
+                    title: "Виклик функції: greet('Artur')",
+                    what: "Створено новий Lexical Environment спеціально для виклику greet. Environment Record заповнено аргументом user: 'Artur'.",
+                    why: "Виклик функції створює новий Execution Context на вершині Call Stack. Рушій ініціалізує середовище та відразу відображає передані аргументи в Declarative ER.",
+                    insight: "[[OuterEnv]] нової функції вказує на Global ER, оскільки функція була лексично створена (оголошена) саме там. Це основа статичного скоупінгу."
+                },
+                action: () => {
+                    document.getElementById('globalEnv').classList.add('visible');
+                    document.getElementById('greetEnv').classList.add('visible');
+                    
+                    document.getElementById('valMsg').className = 'val-uninit';
+                    document.getElementById('valMsg').innerText = '<uninitialized>';
+                }
+            },
+            {
+                codeLine: 'line3',
+                narration: {
+                    title: "Локальний стан: ініціалізація message",
+                    what: "У Declarative Environment Record функції greet записано значення 'Hello' для змінної message. Змінна вийшла з TDZ.",
+                    why: "Поточний Execution Context виконав рядок 3. Локальна змінна ініціалізується всередині власного лексичного середовища.",
+                    insight: "Функція має власне ізольоване сховище. Якщо їй знадобиться appName, рушій спочатку шукатиме його тут (провалиться), а потім рекурсивно підніметься по стрілці [[OuterEnv]]."
+                },
+                action: () => {
+                    document.getElementById('globalEnv').classList.add('visible');
+                    document.getElementById('greetEnv').classList.add('visible');
+                    
+                    document.getElementById('valMsg').className = 'val-primitive';
+                    document.getElementById('valMsg').innerText = '"Hello"';
+                }
+            }
+        ]
+    };
+
+    // 4. Ініціалізуємо рушій
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

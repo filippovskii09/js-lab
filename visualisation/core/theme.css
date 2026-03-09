@@ -1,0 +1,201 @@
+:root {
+  /* Common Palette */
+  --color-stack: #2c3e50;
+  --color-heap: #fdfefe;
+  --color-primitive: #27ae60;
+  --color-reference: #8e44ad;
+  --color-uninit: #e74c3c;
+  --color-bg: #f4f7f6;
+  --color-border: #bdc3c7;
+  --color-text: #333;
+
+  /* VS Code Style Code Block */
+  --code-bg: #2c3e50;
+  --code-text: #ecf0f1;
+  --code-active-line: rgba(52, 152, 219, 0.4);
+  --code-active-border: #3498db;
+
+  /* Terminal Style Analysis Panel */
+  --log-bg: #1e272e;
+  --log-text: #d2dae2;
+  --log-accent: #0fb9b1;
+  --log-label: #f7d794;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.6;
+  margin: 0;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+/* Base Layout Structure */
+.js-lab-header { text-align: center; margin-bottom: 15px; flex-shrink: 0; }
+.js-lab-header h2 { margin: 0 0 5px 0; color: var(--color-stack); }
+
+.js-lab-controls {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 20px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.js-lab-btn {
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  background-color: var(--color-stack);
+  color: white;
+  border-radius: 4px;
+  font-weight: bold;
+  transition: background 0.2s, opacity 0.2s;
+}
+.js-lab-btn:hover:not(:disabled) { background-color: #1a252f; }
+.js-lab-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.js-lab-step-info { font-weight: bold; min-width: 120px; text-align: center; color: var(--color-stack); }
+
+.js-lab-app {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+
+.js-lab-top-row {
+  display: flex;
+  gap: 20px;
+  flex: 2;
+  min-height: 0;
+}
+
+/* 1. Code Panel */
+.js-lab-code {
+  flex: 1;
+  background: var(--code-bg);
+  color: var(--code-text);
+  padding: 20px;
+  border-radius: 8px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 16px;
+  overflow-y: auto;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.js-lab-line {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.3s;
+  white-space: pre;
+}
+.js-lab-line.active-line {
+  background-color: var(--code-active-line);
+  border-left: 3px solid var(--code-active-border);
+}
+.js-lab-line-num {
+  display: inline-block;
+  color: #7f8c8d;
+  margin-right: 15px;
+  user-select: none;
+  width: 25px;
+  text-align: right;
+}
+
+/* Syntax Highlighting Utilities */
+.kw { color: #c678dd; } /* Keyword */
+.var { color: #e06c75; } /* Variable */
+.str { color: #98c379; } /* String */
+.fn { color: #61afef; } /* Function */
+.com { color: #7f8c8d; font-style: italic; } /* Comment */
+
+/* 2. Stack Panel */
+.js-lab-stack {
+  flex: 1;
+  background: #fff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  border: 2px solid var(--color-border);
+}
+.js-lab-stack-title {
+  font-weight: bold;
+  color: var(--color-stack);
+  font-size: 18px;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.js-lab-stack-container {
+  display: flex;
+  flex-direction: column-reverse; /* Нові завжди зверху */
+  gap: 15px;
+  width: 100%;
+  max-width: 450px;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+/* 3. Analysis Panel */
+.js-lab-analysis {
+  flex: 1;
+  background: var(--log-bg);
+  color: var(--log-text);
+  border-radius: 8px;
+  padding: 20px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+  border-left: 5px solid var(--log-accent);
+  overflow-y: auto;
+  min-height: 150px;
+  max-height: 250px;
+}
+.js-lab-analysis h3 {
+  margin: 0 0 15px 0;
+  color: var(--log-accent);
+  border-bottom: 1px solid #485460;
+  padding-bottom: 10px;
+  font-size: 16px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.js-lab-log-item { margin-bottom: 12px; line-height: 1.5; }
+.js-lab-log-label { font-weight: bold; color: var(--log-label); display: inline-block; min-width: 140px; }
+
+/* Values */
+.val-primitive { color: var(--color-primitive); font-weight: bold; }
+.val-reference { color: var(--color-reference); font-weight: bold; }
+.val-uninit { color: var(--color-uninit); font-style: italic; }
+
+/* Animations & Transitions */
+.log-wrapper { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+.fade-out { opacity: 0; transform: translateY(5px); }
+.fade-in { opacity: 1; transform: translateY(0); }
+
+@keyframes slideUp { 
+  from { transform: translateY(15px); opacity: 0; } 
+  to { transform: translateY(0); opacity: 1; } 
+}
+.slide-up { animation: slideUp 0.3s ease-out forwards; }
+
+/* Shared Visualizer Parts: Lex Env specifics */
+.lexical-env { border: 2px solid #3498db; padding: 15px; background: #ebf5fb; border-radius: 8px; display: none; opacity: 0; }
+.lexical-env.visible { display: block; opacity: 1; animation: slideUp 0.3s ease-out forwards; }
+.env-name { font-weight: bold; color: #2980b9; border-bottom: 2px solid #3498db; padding-bottom: 5px; margin-bottom: 12px; text-align: center; }
+.slot-zone { margin-bottom: 10px; border-radius: 6px; }
+.record-zone { border: 2px dashed #2980b9; padding: 12px; background: #fff; cursor: pointer; transition: all 0.2s; position: relative; }
+.record-zone:hover { background: #fdfefe; border-style: solid; }
+.record-title { font-size: 13px; color: #34495e; font-weight: bold; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+.record-table { display: grid; grid-template-columns: auto 1fr; gap: 6px 15px; font-family: 'Consolas', 'Courier New', monospace; font-size: 14px; }
+.outer-zone { display: flex; align-items: center; gap: 10px; padding: 10px; background: #fef9e7; border: 2px solid #f1c40f; font-family: 'Consolas', 'Courier New', monospace; font-size: 14px; }

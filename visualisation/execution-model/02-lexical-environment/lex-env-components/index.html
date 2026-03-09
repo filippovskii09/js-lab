@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Environment Record Components</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        
+        /* CSS Hierarchy Tree Styling */
+        .diagram-section {
+            flex: 1.5;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: auto;
+            border: 2px solid var(--color-border);
+        }
+        
+        .tree ul {
+            padding-top: 20px; 
+            position: relative;
+            transition: all 0.5s;
+            display: flex;
+            justify-content: center;
+            padding-left: 0;
+        }
+        .tree li {
+            float: left; text-align: center;
+            list-style-type: none;
+            position: relative;
+            padding: 20px 10px 0 10px;
+            transition: all 0.5s;
+        }
+        .tree li::before, .tree li::after{
+            content: '';
+            position: absolute; top: 0; right: 50%;
+            border-top: 2px solid #bdc3c7;
+            width: 50%; height: 20px;
+            z-index: 1;
+        }
+        .tree li::after{
+            right: auto; left: 50%;
+            border-left: 2px solid #bdc3c7;
+        }
+        .tree li:only-child::after, .tree li:only-child::before {
+            display: none;
+        }
+        .tree li:only-child{ padding-top: 0;}
+        .tree li:first-child::before, .tree li:last-child::after{
+            border: 0 none;
+        }
+        .tree li:last-child::before{
+            border-right: 2px solid #bdc3c7;
+            border-radius: 0 5px 0 0;
+        }
+        .tree li:first-child::after{
+            border-radius: 5px 0 0 0;
+        }
+        .tree ul ul::before{
+            content: '';
+            position: absolute; top: 0; left: 50%;
+            border-left: 2px solid #bdc3c7;
+            width: 0; height: 20px;
+            z-index: 1;
+        }
+        .class-node {
+            border: 2px solid #3498db;
+            padding: 12px;
+            text-decoration: none;
+            color: #2c3e50;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            display: inline-block;
+            border-radius: 6px;
+            background: #ebf5fb;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 2;
+            min-width: 140px;
+        }
+        .class-node.active-node {
+            background: #fff3cd;
+            border-color: #f39c12;
+            transform: scale(1.1);
+            box-shadow: 0 0 20px rgba(243, 156, 18, 0.4);
+            z-index: 10;
+        }
+        .class-node .title { font-weight: bold; font-size: 14px; margin-bottom: 5px; color: #2980b9; }
+        .class-node.active-node .title { color: #d35400; }
+        
+        .class-node .props {
+            border-top: 1px solid rgba(0,0,0,0.1);
+            margin-top: 8px;
+            padding-top: 8px;
+            font-size: 11px;
+            text-align: left;
+            color: #34495e;
+            line-height: 1.4;
+        }
+        .node-tag { 
+            font-size: 10px; 
+            background: rgba(0,0,0,0.05); 
+            padding: 2px 6px; 
+            border-radius: 10px; 
+            font-style: italic; 
+            display: inline-block;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Складові частини (The Components)</h2>
+    <p>Візуалізація ієрархії Environment Record згідно зі специфікацією ECMAScript</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line0"><span class="com">// Аналізований приклад коду з Section II</span></div>
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">init</span>(<span class="var">config</span>) {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">var</span> <span class="var">mode</span> <span class="op">=</span> <span class="str">'production'</span>;</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="kw">let</span> <span class="var">retries</span> <span class="op">=</span> <span class="str">3</span>;</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  </div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  <span class="kw">function</span> <span class="fn">doWork</span>() {}</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>}</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ДІАГРАМА МЕМОРІ -->
+        <div class="diagram-section">
+            <div class="js-lab-stack-title" style="margin-bottom: 0;">Environment Record Hierarchy</div>
+            <div class="tree">
+                <ul>
+                    <li>
+                        <div class="class-node" id="node-env">
+                            <div class="node-tag">«abstract»</div>
+                            <div class="title">EnvironmentRecord</div>
+                            <div class="props">
+                                + HasBinding(name)<br>
+                                + CreateMutableBinding()<br>
+                                + InitializeBinding()
+                            </div>
+                        </div>
+                        <ul>
+                            <li>
+                                <div class="class-node" id="node-decl">
+                                    <div class="title">Declarative ER</div>
+                                    <div class="props">- bindings: Map</div>
+                                </div>
+                                <ul>
+                                    <li>
+                                        <div class="class-node" id="node-fn">
+                                            <div class="title">Function ER</div>
+                                            <div class="props">
+                                                + thisValue: Any<br>
+                                                + BindThisValue(V)
+                                            </div>
+                                        </div>
+                                    </li>
+                                    <li>
+                                        <div class="class-node" id="node-mod">
+                                            <div class="title">Module ER</div>
+                                            <div class="props">- imports: Map</div>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </li>
+                            <li>
+                                <div class="class-node" id="node-obj">
+                                    <div class="title">Object ER</div>
+                                    <div class="props">- bindingObject: Object</div>
+                                </div>
+                            </li>
+                            <li>
+                                <div class="class-node" id="node-glob">
+                                    <div class="title">Global ER</div>
+                                    <div class="props">
+                                        - ObjectRecord<br>
+                                        - DeclarativeRecord
+                                    </div>
+                                </div>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function activateNode(nodeId) {
+        document.querySelectorAll('.class-node').forEach(n => n.classList.remove('active-node'));
+        document.getElementById(nodeId).classList.add('active-node');
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => activateNode('node-env'),
+                narration: {
+                    title: "1. Універсальний інтерфейс: EnvironmentRecord",
+                    what: "Це абстрактний базовий клас специфікації ECMAScript, від якого наслідуються всі внутрішні типи записів.",
+                    why: "Рушію V8 потрібен єдиний універсальний інтерфейс (через такі внутрішні методи, як HasBinding), щоб базові алгоритми пошуку змінних (Identifier Resolution) працювали однаково для будь-якого скоупу.",
+                    insight: "Ви ніколи не зустрінете об'єкт 'EnvironmentRecord' у чистій пам'яті під час виконання. Це лише протокольне 'креслення' для створення його нащадків."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                   activateNode('node-decl');
+                   ['line1', 'line3', 'line5'].forEach(id => document.getElementById(id).classList.add('active-line'));
+                },
+                narration: {
+                    title: "2. Сховище декларацій: Declarative Environment Record",
+                    what: "Це сховище для ідентифікаторів, які фізично написані (задекларовані) в коді, наприклад, параметри (config), змінні (let retries) та функції (doWork).",
+                    why: "Declarative Environment Record базується на низькорівневих структурах пам'яті (часто це пряма мапа або регістри компілятора), тому він надзвичайно швидкий для доступу.",
+                    insight: "Саме цей тип Record відповідає за концепцію 'Блочної видимості' (Block Scope) та механізм Temporal Dead Zone (TDZ). Він не дозволяє звертатися до let/const до їхньої ініціалізації."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                   activateNode('node-fn');
+                   ['line1', 'line5'].forEach(id => document.getElementById(id).classList.add('active-line'));
+                },
+                narration: {
+                    title: "3. Функціональний підтип: Function Environment Record",
+                    what: "Функції вимагають значно складнішого стану, тому вони мають свій виділений Record. Він повністю наслідує всі можливості Declarative ER.",
+                    why: "На відміну від звичарних блоків коду, функціям (як init та doWork) під час виклику потрібне місце для зберігання необхідних абстракцій: thisValue (доступ через BindThisValue), super та стану new.target.",
+                    insight: "Pro Tip: Чому стрілкові функції не мають власного this? Специфікація визначає, що для стрілкових функцій створюється такий запис, де слот thisValue просто не заповнюється, і рушій автоматично шукає його вище по OuterEnv."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => activateNode('node-obj'),
+                narration: {
+                    title: "4. Об'єктна обгортка: Object Environment Record",
+                    what: "Цей тип Record бере вже існуючий JavaScript-об'єкт (Binding Object) і змушує його працювати під оболонкою Environment Record.",
+                    why: "Фундаментально потрібен для зворотної сумісності. В основному використовується глобальним об'єктом window та застарілою конструкцією with(obj).",
+                    insight: "Доступ до змінної через Object ER завжди повільніший, ніж через Declarative ER, бо рушію доводиться щоразу робити дорогий пошук по ланцюгу прототипів (Prototype Chain Lookup) справжнього об'єкта."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                   activateNode('node-glob');
+                   document.getElementById('line2').classList.add('active-line'); // var mode
+                },
+                narration: {
+                    title: "5. Монстр-композит: Global Environment Record",
+                    what: "Найцікавіший тип: це об'єднаний рекорд (Composite Record), який інкапсулює всередині себе СРАЗУ ДВА записи: ObjectRecord та DeclarativeRecord.",
+                    why: "Коли ви пишете 'let x = 1' глобально, він записується у DeclarativeRecord і приховується від window. А от 'var mode = production' (ряд. 2) падає прямо в ObjectRecord і стає властивістю window.mode.",
+                    insight: "Global ER — це міст часу. Він дозволяє сучасному JS безпечно та ізольовано використовувати глобальні змінні типу let/const, залишаючись повністю робочим для скриптів часів 1995 року (які маніпулюють глобальними var)."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

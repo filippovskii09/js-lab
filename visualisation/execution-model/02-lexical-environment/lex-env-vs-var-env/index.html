@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Lexical vs Variable Environment</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        
+        .memory-layout {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            height: 100%;
+        }
+
+        .col-ec {
+            flex: 0.8;
+            background: #2c3e50;
+            border-radius: 8px;
+            padding: 15px;
+            color: #ecf0f1;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        .ec-title {
+            font-weight: bold;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            color: #f1c40f;
+        }
+
+        .pointer-box {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #7f8c8d;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 15px;
+            position: relative;
+        }
+
+        .pointer-title {
+            font-size: 11px;
+            color: #bdc3c7;
+            margin-bottom: 5px;
+            font-family: 'Consolas', monospace;
+        }
+
+        .col-envs {
+            flex: 1.2;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            position: relative;
+        }
+
+        /* SVG Paths for pointers */
+        #svg-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .ptr-line {
+            stroke-width: 3;
+            fill: none;
+            transition: d 0.5s ease-in-out;
+            stroke-dasharray: 6;
+            animation: dash 5s linear infinite;
+        }
+
+        .ptr-line-ve {
+            stroke: #e74c3c;
+        }
+
+        .ptr-line-le {
+            stroke: #3498db;
+        }
+
+        @keyframes dash {
+            to { stroke-dashoffset: -40; }
+        }
+
+        /* Pointer Anchor adjustments */
+        #anchor-le-src, #anchor-ve-src {
+            width: 10px; height: 10px;
+            background: #fff;
+            border-radius: 50%;
+            position: absolute;
+            right: -5px;
+            top: 50%;
+            transform: translateY(-50%);
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            z-index: 20;
+        }
+
+        .anchor-dest {
+            width: 10px; height: 10px;
+            background: #bdc3c7;
+            border-radius: 50%;
+            position: absolute;
+            left: -5px;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 20;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+        }
+
+        .record-fade {
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.5s ease;
+        }
+        
+        .record-show {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .dead-zone {
+            filter: grayscale(100%) opacity(50%);
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Lexical vs Variable Environment</h2>
+    <p>Візуалізація: Як рушій зберігає сумісність з var та безпечно ізолює let/const</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">demo</span>() {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">var</span> <span class="var">funcScoped</span> <span class="op">=</span> <span class="str">1</span>;</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  {</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>    <span class="kw">let</span> <span class="var">blockScoped</span> <span class="op">=</span> <span class="str">2</span>;</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>    <span class="kw">var</span> <span class="var">hoistedVar</span> <span class="op">=</span> <span class="str">3</span>;</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>  }</div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>}</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="js-lab-stack" style="position: relative;">
+            
+            <svg id="svg-canvas">
+                <path id="path-ve" class="ptr-line ptr-line-ve" d="M 0 0 L 0 0" marker-end="url(#arrow-ve)" />
+                <path id="path-le" class="ptr-line ptr-line-le" d="M 0 0 L 0 0" marker-end="url(#arrow-le)" />
+                
+                <defs>
+                    <marker id="arrow-ve" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#e74c3c" />
+                    </marker>
+                    <marker id="arrow-le" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3498db" />
+                    </marker>
+                </defs>
+            </svg>
+
+            <div class="memory-layout">
+                <!-- Execution Context -->
+                <div class="col-ec" id="col-ec">
+                    <div class="ec-title">Execution Context</div>
+                    
+                    <div class="pointer-box" id="box-ve">
+                        <div class="pointer-title" style="color:#e74c3c;">V.E. Pointer (Static)</div>
+                        <div style="font-size:10px;">VariableEnvironment</div>
+                        <div id="anchor-ve-src"></div>
+                    </div>
+                    
+                    <div class="pointer-box" id="box-le">
+                        <div class="pointer-title" style="color:#3498db;">L.E. Pointer (Dynamic)</div>
+                        <div style="font-size:10px;">LexicalEnvironment</div>
+                        <div id="anchor-le-src"></div>
+                    </div>
+                </div>
+
+                <!-- Environments -->
+                <div class="col-envs" id="col-envs">
+                    
+                    <div class="lexical-env slot-zone" id="env-func" style="border-color:#bdc3c7;">
+                        <div class="anchor-dest" id="anchor-func-dest"></div>
+                        <div class="env-name">Function Env Record</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-table">
+                                <div>funcScoped:</div><div id="val-fs" class="val-primitive">undefined</div>
+                                <div>hoistedVar:</div><div id="val-hs" class="val-primitive">undefined</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="lexical-env slot-zone record-fade" id="env-block" style="border-color:#3498db; background:#ebf5fb;">
+                        <div class="anchor-dest" id="anchor-block-dest" style="background:#3498db;"></div>
+                        <div class="env-name" style="color:#2980b9;">Block Env Record</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-table">
+                                <div>blockScoped:</div><div id="val-bs" class="val-uninit">&lt;uninitialized&gt;</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span>[[OuterEnv]]:</span> <span style="font-weight:bold;">↳ Function Env</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function drawLine(pathId, srcId, destId) {
+        const path = document.getElementById(pathId);
+        const src = document.getElementById(srcId).getBoundingClientRect();
+        const dest = document.getElementById(destId).getBoundingClientRect();
+        const container = document.getElementById('svg-canvas').getBoundingClientRect();
+
+        const x1 = src.left + src.width/2 - container.left;
+        const y1 = src.top + src.height/2 - container.top;
+        const x2 = dest.left - container.left;
+        const y2 = dest.top + dest.height/2 - container.top;
+
+        // Draw bezier curve for smooth pointer look
+        const cx1 = x1 + 50;
+        const cy1 = y1;
+        const cx2 = x2 - 50;
+        const cy2 = y2;
+
+        path.setAttribute('d', `M ${x1} ${y1} C ${cx1} ${cy1}, ${cx2} ${cy2}, ${x2} ${y2}`);
+    }
+
+    // Refresh lines on window resize
+    const updateLines = () => {
+        if (window.currentLE === 'block') {
+            drawLine('path-le', 'anchor-le-src', 'anchor-block-dest');
+        } else {
+            drawLine('path-le', 'anchor-le-src', 'anchor-func-dest');
+        }
+        drawLine('path-ve', 'anchor-ve-src', 'anchor-func-dest');
+    };
+    window.addEventListener('resize', updateLines);
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line2',
+                action: () => {
+                    window.currentLE = 'func';
+                    document.getElementById('env-block').classList.remove('record-show');
+                    document.getElementById('env-block').classList.remove('dead-zone');
+                    
+                    document.getElementById('val-fs').innerText = '1';
+                    document.getElementById('val-hs').innerText = 'undefined';
+                    document.getElementById('val-bs').className = 'val-uninit';
+                    document.getElementById('val-bs').innerText = '<uninitialized>';
+                    
+                    setTimeout(updateLines, 50); // wait for render
+                    document.getElementById('env-func').style.borderColor = '#bdc3c7';
+                },
+                narration: {
+                    title: "1. Ініціалізація Execution Context",
+                    what: "При старті функції створюється її Execution Context. Його вказівники VariableEnvironment (VE) та LexicalEnvironment (LE) ДИВЛЯТЬСЯ НА ОДИН об'єкт — Function Environment Record.",
+                    why: "На етапі створення рушій пройшовся по всьому коду: знайшов var funcScoped і var hoistedVar (навіть із блоку!) і записав їх як 'undefined' у Function ER, забезпечивши механізм Hoisting.",
+                    insight: "Поки ми не ввійшли у блок {...}, між LE і VE немає жодної різниці."
+                }
+            },
+            {
+                codeLine: 'line3',
+                action: () => {
+                    window.currentLE = 'block';
+                    document.getElementById('env-block').classList.add('record-show');
+                    document.getElementById('env-func').style.borderColor = '#e74c3c'; // Highlight that it's VE logic
+                    setTimeout(updateLines, 50);
+                },
+                narration: {
+                    title: "2. Вхід у блок (Block Scope)",
+                    what: "Зустріли { ... }. Рушій миттєво створює новий 'Block Environment Record'. Магія: вказівник LE динамічно ПЕРЕМИКАЄТЬСЯ на цей новий рекорд, а VE залишається на місці!",
+                    why: "У Block ER записуються let/const. Оскільки пошук змінних завжди йде по ланцюгу LE -> OuterEnv -> ..., це означає, що змінні всередині блоку стають видимими першими.",
+                    insight: "Execution Context має тільки ОДИН ланцюг пошуку (LexicalEnvironment). VariableEnvironment існує ТІЛЬКИ для того, щоб якщо ви напишете 'var x = 3' всередині блоку, рушій знав, куди фізично записати цю змінную (в обхід LE)."
+                }
+            },
+            {
+                codeLine: ['line4', 'line5'],
+                action: () => {
+                    window.currentLE = 'block';
+                    document.getElementById('env-block').classList.add('record-show');
+                    
+                    document.getElementById('val-bs').className = 'val-primitive';
+                    document.getElementById('val-bs').innerText = '2';
+                    document.getElementById('val-bs').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                    
+                    document.getElementById('val-hs').innerText = '3';
+                    document.getElementById('val-hs').style.backgroundColor = 'rgba(231, 76, 60, 0.4)';
+                    
+                    setTimeout(() => {
+                        document.getElementById('val-bs').style.backgroundColor = 'transparent';
+                        document.getElementById('val-hs').style.backgroundColor = 'transparent';
+                    }, 1000);
+                    
+                    setTimeout(updateLines, 50);
+                },
+                narration: {
+                    title: "3. Привласнення значень (Routing Logic)",
+                    what: "Мінлива 'let blockScoped = 2' записується у цільовий Block ER (через LE). А ось 'var hoistedVar = 3' записується у цільовий Function ER (ЧЕРЕЗ СТАТИЧНИЙ VE).",
+                    why: "Алгоритм ідентифікації знає: декларації let/const завжди звертаються до поточного LE. Але декларації var ігнорують LE і жорстко записують значення напряму в VE-вказівник.",
+                    insight: "Саме це архітектурне роздвоєння (LE vs VE) було додано у специфікацію ES6. Воно дозволило ввести блочні let/const, НЕ зламавши роботу старого коду з var, який має спливати (hoist) нагору блоків."
+                }
+            },
+            {
+                codeLine: 'line7',
+                action: () => {
+                    window.currentLE = 'func';
+                    document.getElementById('env-block').classList.add('dead-zone');
+                    
+                    document.getElementById('env-func').style.borderColor = '#bdc3c7';
+                    setTimeout(updateLines, 50);
+                },
+                narration: {
+                    title: "4. Вихід з блоку",
+                    what: "Виконання покинуло блок. Динамічний вказівник LE перемикається НАЗАД на те місце, куди вказує VE (Function ER).",
+                    why: "Block ER від'єднується від ланцюга. Він більше не доступний і буде зібраний Garbage Collector'ом. Зникла й змінна blockScoped.",
+                    insight: "Але hoistedVar (яка була об'явлена всередині блоку) ВИЖИЛА! Бо змінна писалася через VE прямо у Function ER. Ось чому var ігнорує блочну область видимості."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    // Init + initial render lines
+    engine.init();
+    setTimeout(updateLines, 100);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Mastery: Lexical Environment Lifecycle</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        
+        .memory-layout { display: flex; gap: 15px; width: 100%; height: 100%; font-size: 11px; align-items: flex-end;}
+        .col { display: flex; flex-direction: column-reverse; gap: 10px; padding: 10px; border-radius: 8px; background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.05); height: 100%; justify-content: flex-start;}
+        .col-title { font-weight: bold; font-size: 13px; color: #7f8c8d; text-align: center; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .c-ec { flex: 0.9; }
+        .c-env { flex: 1.2; }
+        .c-heap { flex: 0.9; }
+        
+        .box { background: white; border: 2px solid #bdc3c7; border-radius: 6px; padding: 10px; position: relative; opacity: 0; display: none; transform: translateY(10px); transition: all 0.4s; box-shadow: 0 4px 6px rgba(0,0,0,0.05);}
+        .box.visible { opacity: 1; display: flex; flex-direction: column; transform: translateY(0); }
+        .box-title { font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; font-size: 12px; }
+        
+        /* EC Styles */
+        .ec-box { border-color: #34495e; border-width: 3px; }
+        .ec-box .box-title { color: #2c3e50; }
+        .pointer { margin-top: 5px; padding: 4px; background: #f8f9fa; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 10.5px; transition: all 0.3s;}
+        .ptr-le { border-left: 3px solid #3498db; }
+        .ptr-ve { border-left: 3px solid #e74c3c; }
+        .ptr-active { background: #ebf5fb; font-weight: bold; color: #2980b9; border-color: #2980b9;}
+        
+        /* ER Styles */
+        .er-global { border-color: #f39c12; }
+        .er-func { border-color: #27ae60; border-width: 2px; }
+        .er-block { border-color: #3498db; border-style: dashed; }
+        .er-run { border-color: #9b59b6; }
+        .closure-badge { background: #f1c40f; color: #d35400; font-size: 9px; padding: 2px 5px; border-radius: 10px; font-weight: bold; display: none; margin-left: auto; text-transform: uppercase; }
+        .is-closure .closure-badge { display: inline-block; }
+        .is-closure { box-shadow: 0 0 15px rgba(241, 196, 15, 0.4); border-color: #f39c12; }
+        
+        /* Heap Styles */
+        .heap-obj { border-color: #8e44ad; background: #fdfefe;}
+        
+        .val-table { display: grid; grid-template-columns: auto 1fr; gap: 6px; }
+        .val-table > div:nth-child(odd) { color: #7f8c8d; }
+        .search-highlight { background-color: #f1c40f44 !important; outline: 2px solid #f1c40f; border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Mastery: Життєвий цикл Environment Record</h2>
+    <p>Підсумкова візуалізація усіх етапів: Створення, Блоки, Замикання та Пошук</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 0.8;">
+            <div class="js-lab-line" id="l1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">mode</span> <span class="op">=</span> <span class="str">'PROD'</span>;</div>
+            <div class="js-lab-line" id="l2"><span class="js-lab-line-num">2</span><span class="kw">var</span> <span class="var">ver</span> <span class="op">=</span> <span class="str">1</span>;</div>
+            <div class="js-lab-line" id="l3"><span class="js-lab-line-num">3</span></div>
+            <div class="js-lab-line" id="l4"><span class="js-lab-line-num">4</span><span class="kw">function</span> <span class="fn">init</span>(<span class="var">user</span>) {</div>
+            <div class="js-lab-line" id="l5"><span class="js-lab-line-num">5</span>  <span class="kw">var</span> <span class="var">id</span> <span class="op">=</span> <span class="str">99</span>;</div>
+            <div class="js-lab-line" id="l6"><span class="js-lab-line-num">6</span>  {</div>
+            <div class="js-lab-line" id="l7"><span class="js-lab-line-num">7</span>    <span class="kw">let</span> <span class="var">role</span> <span class="op">=</span> <span class="str">'admin'</span>;</div>
+            <div class="js-lab-line" id="l8"><span class="js-lab-line-num">8</span>    <span class="kw">var</span> <span class="var">flag</span> <span class="op">=</span> <span class="kw">true</span>;</div>
+            <div class="js-lab-line" id="l9"><span class="js-lab-line-num">9</span>  }</div>
+            <div class="js-lab-line" id="l10"><span class="js-lab-line-num">10</span>  <span class="kw">return</span> <span class="kw">function</span> <span class="fn">run</span>() {</div>
+            <div class="js-lab-line" id="l11"><span class="js-lab-line-num">11</span>    <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">user</span>, <span class="var">mode</span>);</div>
+            <div class="js-lab-line" id="l12"><span class="js-lab-line-num">12</span>  };</div>
+            <div class="js-lab-line" id="l13"><span class="js-lab-line-num">13</span>}</div>
+            <div class="js-lab-line" id="l14"><span class="js-lab-line-num">14</span></div>
+            <div class="js-lab-line" id="l15"><span class="js-lab-line-num">15</span><span class="kw">const</span> <span class="var">app</span> <span class="op">=</span> <span class="fn">init</span>(<span class="str">'Artur'</span>);</div>
+            <div class="js-lab-line" id="l16"><span class="js-lab-line-num">16</span><span class="fn">app</span>();</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="js-lab-stack" style="flex: 2; padding: 10px;">
+            <div class="memory-layout">
+                
+                <!-- Stack: EC -->
+                <div class="col c-ec">
+                    <div class="col-title">Execution Context Stack</div>
+                    
+                    <div class="box ec-box visible" id="ec-global">
+                        <div class="box-title">EC: Global</div>
+                        <div class="pointer ptr-le">LE -> Global ER</div>
+                    </div>
+                    
+                    <div class="box ec-box" id="ec-init">
+                        <div class="box-title">EC: init()</div>
+                        <div class="pointer ptr-le" id="ptr-init-le">LE -> init ER</div>
+                        <div class="pointer ptr-ve">VE -> init ER</div>
+                    </div>
+                    
+                    <div class="box ec-box" id="ec-run">
+                        <div class="box-title" style="color:#8e44ad;">EC: run()</div>
+                        <div class="pointer ptr-le">LE -> run ER</div>
+                    </div>
+                </div>
+
+                <!-- Env Records -->
+                <div class="col c-env">
+                    <div class="col-title">Environment Records (Scope)</div>
+                    
+                    <div class="box er-global visible" id="er-global">
+                        <div class="box-title" style="color:#f39c12;">Global ER <span style="font-weight:normal; font-size:10px;">(Composite)</span></div>
+                        <div class="val-table">
+                            <div><i>[Decl]</i> mode:</div><div id="v-mode" class="val-primitive">"PROD"</div>
+                            <div><i>[Decl]</i> app:</div><div id="v-app" class="val-uninit">&lt;uninit&gt;</div>
+                            <div><i>[Obj]</i> ver:</div><div id="v-ver" class="val-primitive">1</div>
+                            <div>[[OuterEnv]]:</div><div style="font-weight:bold; color:#c0392b;">null</div>
+                        </div>
+                    </div>
+                    
+                    <div class="box er-func" id="er-init">
+                        <div style="display:flex; align-items:center;" class="box-title">
+                            <span style="color:#27ae60;">init ER (Func)</span>
+                            <span class="closure-badge">🔒 Closure</span>
+                        </div>
+                        <div class="val-table">
+                            <div id="k-user">user:</div><div id="v-user" class="val-primitive">"Artur"</div>
+                            <div>id:</div><div id="v-id" class="val-primitive">99</div>
+                            <div>flag:</div><div id="v-flag" class="val-primitive">undefined</div>
+                            <div>[[OuterEnv]]:</div><div class="val-reference">↳ Global ER</div>
+                        </div>
+                    </div>
+                    
+                    <div class="box er-block" id="er-block">
+                        <div class="box-title" style="color:#3498db;">Block ER</div>
+                        <div class="val-table">
+                            <div>role:</div><div id="v-role" class="val-primitive">"admin"</div>
+                            <div>[[OuterEnv]]:</div><div class="val-reference">↳ init ER</div>
+                        </div>
+                    </div>
+                    
+                    <div class="box er-run" id="er-run">
+                        <div class="box-title" style="color:#8e44ad;">run ER (Func)</div>
+                        <div class="val-table">
+                            <div>[[OuterEnv]]:</div><div class="val-reference" id="out-run">↳ init ER</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Heap -->
+                <div class="col c-heap">
+                    <div class="col-title">Heap Memory</div>
+                    <div class="box heap-obj visible" id="ho-init">
+                        <div class="box-title">fn: init</div>
+                        <div class="val-table">
+                            <div>[[Env]]:</div><div class="val-reference">&lt;Global ER&gt;</div>
+                        </div>
+                    </div>
+                    
+                    <div class="box heap-obj" id="ho-run">
+                        <div class="box-title" style="color:#8e44ad;">fn: run</div>
+                        <div class="val-table">
+                            <div>[[Env]]:</div><div class="val-reference">&lt;init ER&gt;</div>
+                        </div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function setVis(ids, isVisible) {
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if(isVisible) el.classList.add('visible');
+            else el.classList.remove('visible');
+        });
+    }
+
+    function hlCode(ids) {
+        document.querySelectorAll('.js-lab-line').forEach(el => el.classList.remove('active-line'));
+        ids.forEach(id => document.getElementById(id).classList.add('active-line'));
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => {
+                    hlCode(['l1', 'l2', 'l4']);
+                    setVis(['ec-init', 'er-init', 'er-block', 'er-run', 'ec-run', 'ho-run'], false);
+                    document.getElementById('er-init').classList.remove('is-closure');
+                    document.getElementById('ptr-init-le').className = 'pointer ptr-le';
+                    document.getElementById('ptr-init-le').innerText = 'LE -> init ER';
+                },
+                narration: {
+                    title: "1. Compilation: Global Composite Env",
+                    what: "Створюється Global Execution Context. Одночасно ініціалізується Global Environment Record, що складається з об'єктного (var var) та декларативного (let mode) рекорду.",
+                    why: "Парсер одразу ж створює функцію `init` у купі (Heap) та жорстко записує у її слот `[[Environment]]` посилання на поточний Global ER (Static Scope).",
+                    insight: "Композитна структура глобального середовища — це те, що дозволяє window.ver існувати, а window.mode видавати undefined: вони лежать у різних гілках рушія."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                    hlCode(['l15']);
+                    setVis(['ec-init', 'er-init'], true);
+                    setVis(['er-block'], false);
+                    document.getElementById('v-flag').innerText = 'undefined';
+                },
+                narration: {
+                    title: "2. Виклик функції: Lexical & Variable Envs",
+                    what: "Виклик init('Artur'). Створюється окремий Execution Context у стеку для функції. Його LE та VE вказівники націлені на новостворений Function Environment Record.",
+                    why: "Аргумент `user` та локальна змінна `id` записуються в Environment. Зверніть увагу: змінна `flag`, хоч і стоїть всередині блоку далі, уже була записана (hoisted) як undefined через статичний вказівник VE.",
+                    insight: "Function ER є першим серйозним сховищем стану: він не тільки тримає змінні, а й прив'язує this та формує новий рівень у Scope Chain ([[OuterEnv]] -> Global)."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                    hlCode(['l6', 'l7', 'l8']);
+                    setVis(['er-block'], true);
+                    const ptr = document.getElementById('ptr-init-le');
+                    ptr.className = 'pointer ptr-le ptr-active';
+                    ptr.innerText = 'LE -> Block ER!';
+                    document.getElementById('v-flag').innerText = 'true';
+                },
+                narration: {
+                    title: "3. Блочна область (Block Scope)",
+                    what: "Вхід у блок `{...}`. Створюється відокремлений Block Environment Record. Динамічний вказівник LexicalEnvironment (LE) перемикається на нього.",
+                    why: "Змінна `let role = 'admin'` записується до тимчасового Block ER. А от `var flag = true` ігнорує LE і записує значення у базову функцію через незмінний вказівник VE.",
+                    insight: "Саме так рушій вирішив конфлікт ES6: не ламаючи поведінку старого var (який піднімається), він додав безпечну ізоляцію для let/const через динамічний пінг-понг вказівником LE."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                    hlCode(['l10']);
+                    setVis(['er-block', 'ec-init'], false);
+                    setVis(['ho-run'], true);
+                    document.getElementById('er-init').classList.add('is-closure');
+                    document.getElementById('v-app').className = 'val-reference';
+                    document.getElementById('v-app').innerText = '<f: run>';
+                },
+                narration: {
+                    title: "4. Народження замикання (Closure is Born)",
+                    what: "Функція `init` повертає нову функцію `run` у змінну `app`. Execution Context `init` назавжди ВИЛУЧАЄТЬСЯ зі стека викликів.",
+                    why: "Оскільки функція `run` у своєму `[[Environment]]` зберегла посилання на `init ER`, Garbage Collector залишає `init ER` жити у пам'яті (Heap). Він стає Замиканням (Closure).",
+                    insight: "Лексичне середовище більше не прив'язане до життєвого циклу стека! Воно житиме стільки, скільки глобальна змінна `app` на нього посилатиметься."
+                }
+            },
+            {
+                codeLine: null,
+                action: () => {
+                    hlCode(['l16', 'l11']);
+                    setVis(['ec-run', 'er-run'], true);
+                    
+                    document.getElementById('v-user').classList.add('search-highlight');
+                    document.getElementById('v-mode').classList.add('search-highlight');
+                    document.getElementById('k-user').classList.add('search-highlight');
+                    
+                    setTimeout(() => {
+                        document.getElementById('v-user').classList.remove('search-highlight');
+                        document.getElementById('v-mode').classList.remove('search-highlight');
+                        document.getElementById('k-user').classList.remove('search-highlight');
+                    }, 2000);
+                },
+                narration: {
+                    title: "5. Identifier Resolution (Алгоритм пошуку)",
+                    what: "Виклик `app()`. Створюється порожній `run ER`. console.log намагається знайти `user` та `mode`.",
+                    why: "Алгоритм GetIdentifierReference(env, name): локально в `run ER` нічого немає. Рекурсія йде у `[[OuterEnv]]` -> Замикання `init ER`. Знайдено `user`! Для `mode` йдемо ще вище -> `Global ER`. Знайдено `mode`!",
+                    insight: "Scope Chain Resolution працює завдяки тому, що кожен Environment Record пов'язаний як однозв'язний список знизу вгору. Динамічний виклик, але повністю Статичний (Лексичний) доступ до даних!"
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

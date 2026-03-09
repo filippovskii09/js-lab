@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Static Scope & Closures</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        
+        .memory-layout {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+        }
+        .col-env {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        /* Styles for function objects */
+        .heap-obj {
+            border: 2px solid #8e44ad;
+            background: #fdfefe;
+            border-radius: 6px;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.4s ease-out;
+        }
+        .heap-obj.visible {
+            display: block; opacity: 1; transform: translateY(0);
+        }
+        .heap-obj-title {
+            font-weight: bold; color: #8e44ad; margin-bottom: 8px; border-bottom: 1px solid #ebdef0; padding-bottom: 4px;
+        }
+        
+        .closure-badge {
+            display: inline-block;
+            background: #f1c40f;
+            color: #d35400;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-left: 10px;
+            display: none;
+        }
+        
+        #envClosure.is-closure {
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.4);
+            border-width: 3px;
+        }
+        #envClosure.is-closure .closure-badge {
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Static Scope & Closures</h2>
+    <p>Візуалізація: Як внутрішній слот [[Environment]] фіксує область видимості назавжди</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">createCounter</span>() {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">let</span> <span class="var">count</span> <span class="op">=</span> <span class="str">0</span>;</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  </div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  <span class="kw">return</span> <span class="kw">function</span> <span class="fn">increment</span>() {</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>    <span class="var">count</span><span class="op">++</span>;</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>    <span class="fn">console</span>.<span class="fn">log</span>(<span class="str">`Current: ${count}`</span>);</div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>  };</div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span>}</div>
+            <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span></div>
+            <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="kw">const</span> <span class="var">counter</span> <span class="op">=</span> <span class="fn">createCounter</span>();</div>
+            <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span><span class="fn">counter</span>(); <span class="com">// 1</span></div>
+            <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span><span class="fn">counter</span>(); <span class="com">// 2</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="js-lab-stack" style="overflow-y: auto;">
+            <div class="js-lab-stack-title" style="display:flex; justify-content: space-between;">
+                <span>Lexical Environments (Stack)</span>
+                <span style="color:#8e44ad;">Heap Memory Objects</span>
+            </div>
+            
+            <div class="memory-layout">
+                <!-- COL 1: Lexical Environments -->
+                <div class="col-env">
+                    <!-- Global Env -->
+                    <div class="lexical-env slot-zone visible" id="envGlobal">
+                        <div class="env-name">Global Env</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-table">
+                                <div>createCounter:</div><div class="val-reference">&lt;f()&gt;</div>
+                                <div>counter:</div><div id="valCounterVar" class="val-uninit">&lt;uninitialized&gt;</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- createCounter Env -->
+                    <div class="lexical-env slot-zone" id="envClosure" style="border-color: #27ae60; background: #e9f7ef;">
+                        <div class="env-name" style="color: #27ae60; border-color: #27ae60;">createCounter Env <span class="closure-badge">🔒 Closure</span></div>
+                        <div class="record-zone slot-zone" style="border-color: #27ae60;">
+                            <div class="record-table">
+                                <div>count:</div><div id="valCountVar" class="val-primitive">0</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span>[[OuterEnv]]:</span> <span style="font-weight:bold;">Global Env</span>
+                        </div>
+                    </div>
+
+                    <!-- increment Env -->
+                    <div class="lexical-env slot-zone" id="envInc" style="border-color: #3498db; background: #ebf5fb;">
+                        <div class="env-name" style="color: #2980b9; border-color: #3498db;" id="envIncLabel">increment Env (Call 1)</div>
+                        <div class="record-zone slot-zone" style="border-color: #3498db; padding: 5px;">
+                            <div style="color:#7f8c8d; font-style:italic; font-size: 11px; text-align:center;">(no local vars)</div>
+                        </div>
+                        <div class="outer-zone slot-zone" style="background:#d6eaf8;">
+                            <span>[[OuterEnv]]:</span> <span style="color:#27ae60;font-weight:bold;" id="outerRefTarget">↳ createCounter Env</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- COL 2: HEAP OBJECTS -->
+                <div class="col-env">
+                    <!-- Function Object createCounter -->
+                    <div class="heap-obj visible" id="objCounterFn">
+                        <div class="heap-obj-title">Function: createCounter</div>
+                        <div class="record-table" style="font-size: 11px;">
+                            <div style="color:#d35400;">[[Environment]]:</div><div class="val-reference">&lt;Global Env&gt;</div>
+                            <div style="color:#7f8c8d;">[[Code]]:</div><div class="val-primitive">"..."</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Function Object increment -->
+                    <div class="heap-obj" id="objIncFn">
+                        <div class="heap-obj-title" style="color:#27ae60; border-color:#a9dfbf;">Function: increment</div>
+                        <div class="record-table" style="font-size: 11px;">
+                            <div style="color:#d35400;">[[Environment]]:</div><div class="val-reference" style="background:#e9f7ef; border-color:#27ae60; color:#27ae60;" id="incObjEnv">&lt;createCounter Env&gt;</div>
+                            <div style="color:#7f8c8d;">[[Code]]:</div><div class="val-primitive">"..."</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function setNodesVisible(ids, visible) {
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if (visible) el.classList.add('visible');
+            else el.classList.remove('visible');
+        });
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => {
+                    setNodesVisible(['envClosure', 'envInc', 'objIncFn'], false);
+                    document.getElementById('envClosure').classList.remove('is-closure');
+                    document.getElementById('valCounterVar').className = 'val-uninit';
+                    document.getElementById('valCounterVar').innerText = '<uninitialized>';
+                },
+                narration: {
+                    title: "1. Compilation Phase: Створення функції",
+                    what: "Під час парсингу рушій створює Object для функції createCounter у купі пам'яті (Heap).",
+                    why: "Увага на слот [[Environment]]! Рушій одразу жорстко 'прив'язує' до об'єкта посилання на поточне середовище (Global Env), де ця функція була фізично написана.",
+                    insight: "Static Scope (Лексична видимість) означає, що функція запам'ятовує своє оточення на етапі СТВОРЕННЯ, а не на етапі ВОКЛИКУ."
+                }
+            },
+            {
+                codeLine: 'line10',
+                action: () => {
+                    setNodesVisible(['envClosure', 'objIncFn'], true);
+                    setNodesVisible(['envInc'], false);
+                    document.getElementById('envClosure').classList.remove('is-closure');
+                    document.getElementById('valCountVar').innerText = '0';
+                    document.getElementById('valCounterVar').className = 'val-uninit';
+                    document.getElementById('valCounterVar').innerText = '<uninitialized>';
+                    
+                    document.getElementById('incObjEnv').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                    setTimeout(() => document.getElementById('incObjEnv').style.backgroundColor = 'transparent', 800);
+                },
+                narration: {
+                    title: "2. Виклик createCounter()",
+                    what: "Створюється новий LexEnv для виклику createCounter. Всередині нього на 4-му рядку оголошується функція increment.",
+                    why: "Коли рушій створює функцію increment, він записує в її [[Environment]] посилання на ПОТОЧНЕ активне середовище — тобто 'createCounter Env'.",
+                    insight: "Функція increment зараз 'сфотографувала' своє оточення. Вона точно знає, де лежить змінна count, навіть якщо ми винесемо її в інший контекст."
+                }
+            },
+            {
+                codeLine: 'line10',
+                action: () => {
+                    setNodesVisible(['envClosure', 'objIncFn'], true);
+                    setNodesVisible(['envInc'], false);
+                    document.getElementById('envClosure').classList.add('is-closure');
+                    
+                    document.getElementById('valCounterVar').className = 'val-reference';
+                    document.getElementById('valCounterVar').innerText = '<f: increment>';
+                },
+                narration: {
+                    title: "3. Магія Замикання (Closure is born)",
+                    what: "Функція повернула об'єкт increment, який був записаний у глобальну змінну counter.",
+                    why: "Зазвичай, коли функція завершується, її середовище видаляється з пам'яті. Але тут 'createCounter Env' ВИЖИВАЄ (позначка Closure 🔒), бо глобальний об'єкт increment міцно тримає його за допомогою свого [[Environment]].",
+                    insight: "Це і є 'Замикання'. Замикання — це об'єкт функції + всі збережені посилання на об'єкти Lexical Environments у її слоті [[Environment]]. V8 Garbage Collector не чіпатиме цю пам'ять!"
+                }
+            },
+            {
+                codeLine: 'line11',
+                action: () => {
+                    setNodesVisible(['envClosure', 'objIncFn', 'envInc'], true);
+                    document.getElementById('envClosure').classList.add('is-closure');
+                    document.getElementById('envIncLabel').innerText = 'increment Env (Call 1)';
+                    document.getElementById('line5').classList.add('active-line');
+                    
+                    document.getElementById('valCountVar').innerText = '1';
+                    document.getElementById('valCountVar').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                    setTimeout(() => document.getElementById('valCountVar').style.backgroundColor = 'transparent', 800);
+                },
+                narration: {
+                    title: "4. Виконання counter() -> Call 1",
+                    what: "Виклик counter(). Рушій створює новий середовище 'increment Env'. Завдяки слоту [[Environment]] він знає, що [[OuterEnv]] треба направити на збережений 'createCounter Env'.",
+                    why: "Відбувається count++. Рушій шукає count в 'increment Env' (пусто) → піднімається по [[OuterEnv]] → знаходить у замиканні → інкрементує до 1.",
+                    insight: "Статична пам'ять доведена: змінні count більше немає в активному Call Stack (бо createCounter завершився), але функція 'стрибнула' у своє рідне середовище у Heap!"
+                }
+            },
+            {
+                codeLine: 'line12',
+                action: () => {
+                    setNodesVisible(['envClosure', 'objIncFn', 'envInc'], true);
+                    document.getElementById('envClosure').classList.add('is-closure');
+                    document.getElementById('envIncLabel').innerText = 'increment Env (Call 2)';
+                    document.getElementById('line5').classList.add('active-line');
+                    
+                    document.getElementById('valCountVar').innerText = '2';
+                    document.getElementById('valCountVar').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                    setTimeout(() => document.getElementById('valCountVar').style.backgroundColor = 'transparent', 800);
+                },
+                narration: {
+                    title: "5. Виконання counter() -> Call 2",
+                    what: "Другий виклик створює АБСОЛЮТНО НОВИЙ 'increment Env'. Але його [[OuterEnv]] знову ініціалізується з того самого жорсткого [[Environment]] функції.",
+                    why: "Обидва (і всі майбутні) виклики counter будуть посилатися на той САМИЙ екземпляр 'createCounter Env' у Heap і мутувати спільний стан count (тепер 2).",
+                    insight: "Dynamic Scope (як у Bash) створив би хаос: функція намагалась би знайти count в місці виклику (глобально) і впала б з помилкою. Статична область видимості робить JS-код надійним та передбачуваним!"
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

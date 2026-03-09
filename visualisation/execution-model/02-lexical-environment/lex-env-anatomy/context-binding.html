@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Execution Context Binding</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .kw-bool { color: #d19a66; } /* Booleans */
+
+        /* Execution Context Box */
+        .exec-context {
+            border: 3px solid #7f8c8d;
+            border-radius: 8px;
+            padding: 15px;
+            background: #ecf0f1;
+            position: relative;
+            display: none;
+            opacity: 0;
+            animation: slideUp 0.3s ease-out forwards;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .exec-context.visible { display: block; opacity: 1; }
+
+        .ec-title {
+            font-weight: 800;
+            color: #2c3e50;
+            text-transform: uppercase;
+            border-bottom: 2px solid #bdc3c7;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            text-align: center;
+            letter-spacing: 1px;
+        }
+
+        .ec-binding-pointer {
+            font-family: 'Consolas', monospace;
+            font-size: 14px;
+            background: #fff;
+            padding: 10px 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 4px solid #8e44ad;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.05);
+        }
+
+        .pointer-label { color: #34495e; font-weight: bold; }
+        .pointer-ref { color: #8e44ad; font-weight: bold; background: #f4ecf7; padding: 2px 6px; border-radius: 4px; border: 1px solid #d7bde2; }
+
+        /* Override LexEnv to fit cleanly inside Execution Context */
+        .lexical-env.attached {
+            display: block; 
+            opacity: 1;
+            animation: none;
+            border: 2px dashed #3498db;
+            margin: 0;
+            box-shadow: none;
+        }
+        
+        #runEnvObj { border-color: #27ae60; background: #e9f7ef; }
+        #runEnvObj .env-name { color: #27ae60; border-color: #27ae60; }
+        #runEnvObj .record-zone { border-color: #27ae60; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Execution Context & Lexical Environment Binding</h2>
+    <p>Візуалізація зв'язку: Як Контекст "пам'ятає" своє Лексичне середовище</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">globalName</span> <span class="op">=</span> <span class="str">'App'</span>;</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span></div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span><span class="kw">function</span> <span class="fn">run</span>(<span class="var">user</span>) {</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  <span class="kw">let</span> <span class="var">isAdmin</span> <span class="op">=</span> <span class="kw-bool">true</span>;</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  <span class="com">// (1) Виконання зупинилося тут</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">globalName</span>);</div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>}</div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span></div>
+            <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span><span class="fn">run</span>(<span class="str">'Artur'</span>);</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Execution Context Stack</div>
+            <div class="js-lab-stack-container" id="stack">
+                
+                <!-- Global Execution Context Box -->
+                <div class="exec-context" id="globalEc">
+                    <div class="ec-title">Global Execution Context</div>
+                    
+                    <!-- Binding Pointer -->
+                    <div class="ec-binding-pointer">
+                        <span class="pointer-label">LexicalEnvironment:</span>
+                        <span class="pointer-ref">↳ &lt;ref to Global Env&gt;</span>
+                    </div>
+                    
+                    <!-- Attached Lexical Environment -->
+                    <div class="lexical-env attached">
+                        <div class="env-name">Global Lexical Environment</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-title">1. Environment Record</div>
+                            <div class="record-table">
+                                <div style="color: #c678dd; font-weight: bold;">[this]:</div><div class="val-reference">&lt;globalThis&gt;</div>
+                                <div>globalName:</div><div id="valGlobal" class="val-uninit">&lt;uninitialized&gt;</div>
+                                <div>run:</div><div class="val-reference">&lt;f()&gt;</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span>2. [[OuterEnv]]:</span> <span style="color:#c0392b;font-weight:bold;">null</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Run Function Execution Context Box -->
+                <div class="exec-context" id="runEc">
+                    <div class="ec-title">Execution Context: run()</div>
+                    
+                    <!-- Binding Pointer -->
+                    <div class="ec-binding-pointer">
+                        <span class="pointer-label">LexicalEnvironment:</span>
+                        <span class="pointer-ref">↳ &lt;ref to Run Env&gt;</span>
+                    </div>
+                    
+                    <!-- Attached Lexical Environment -->
+                    <div class="lexical-env attached" id="runEnvObj">
+                        <div class="env-name">run Lexical Environment</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-title">1. Environment Record</div>
+                            <div class="record-table">
+                                <div id="lblThisRun" style="color: #c678dd; font-weight: bold; transition: background 0.3s; padding: 0 4px; border-radius: 3px;">[this]:</div>
+                                <div id="valThisRun" class="val-reference" style="transition: background 0.3s; padding: 0 4px; border-radius: 3px;">&lt;globalThis&gt;</div>
+                                <div>user:</div><div class="val-primitive">"Artur"</div>
+                                <div>isAdmin:</div><div id="valAdmin" class="val-uninit">&lt;uninitialized&gt;</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span>2. [[OuterEnv]]:</span> <span style="color:#e67e22;font-weight:bold;">↓</span> <span style="color:#d35400;font-weight:bold;">Global Env</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../core/engine.js';
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "1. Global Execution Context",
+                    what: "Створено Global Execution Context (GEC) (сіра рамка), який поміщено в Call Stack. Разом із ним рушій створює Global Lexical Environment.",
+                    why: "Будь-який процес у V8 потребує 'Контексту Виконання' — спеціальної оболонки-менеджера. Контекст запам'ятовує об'єкт середовища через внутрішній вказівник LexicalEnvironment.",
+                    insight: "Контекст Виконання і Lexical Environment — це РІЗНІ речі. Контекст — це 'менеджер процесу' (тримає інструкції та вказівники), а LexEnvironment — це 'база даних' для змінних."
+                },
+                action: () => {
+                    document.getElementById('globalEc').classList.add('visible');
+                    document.getElementById('runEc').classList.remove('visible');
+                    
+                    document.getElementById('valGlobal').className = 'val-uninit';
+                    document.getElementById('valGlobal').innerText = '<uninitialized>';
+                }
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "2. Етап виконання (Global)",
+                    what: "Контекст Виконання обробляє рядок 1. Змінній globalName присвоюється значення 'App'. Зміна фізично відбувається в Environment Record.",
+                    why: "Оскільки Контекст має пряме посилання (LexicalEnvironment pointer) на Global LexEnv, він точно знає, в який саме об'єкт пам'яті записувати значення.",
+                    insight: "Структура чітково розділена: Контекст лише контролює потік виконання коду, але самі дані лежать суворо у прив'язаному сховищі (Lexical Environment)."
+                },
+                action: () => {
+                    document.getElementById('globalEc').classList.add('visible');
+                    document.getElementById('runEc').classList.remove('visible');
+                    
+                    document.getElementById('valGlobal').className = 'val-primitive';
+                    document.getElementById('valGlobal').innerText = '"App"';
+                }
+            },
+            {
+                codeLine: 'line9',
+                narration: {
+                    title: "3. Виклик функції: Створення Контексту",
+                    what: "Створено новий Execution Context для функції run(). КРИТИЧНО: Контекст одразу створює НОВИЙ Lexical Environment і записує посилання (ref) на нього у свій слот.",
+                    why: "Виклик функції додає новий фрейм-контекст у Call Stack. Щоб ізолювати змінні (user, isAdmin), Контекст ініціалізує унікальне 'Сховище' і міцно зв'язується з ним.",
+                    insight: "Це саме та 'прив'язка' зі статті. Зверни увагу на фіолетовий блок: Контекст (сірий) зберігає посилання (↳ <ref to Run Env>), яке вказує на внутрішній синій блок даних."
+                },
+                action: () => {
+                    document.getElementById('globalEc').classList.add('visible');
+                    document.getElementById('runEc').classList.add('visible');
+                    
+                    document.getElementById('valAdmin').className = 'val-uninit';
+                    document.getElementById('valAdmin').innerText = '<uninitialized>';
+                }
+            },
+            {
+                codeLine: 'line4',
+                narration: {
+                    title: "4. Локальне виконання",
+                    what: "Контекст функції run() перейшов на 4 рядок та ініціалізував змінну isAdmin значенням true у своєму Environment Record.",
+                    why: "Коли коду треба записати або прочитати змінну, Контекст дивиться у свій властивість 'LexicalEnvironment' і модифікує саме те середовище, на яке має посилання.",
+                    insight: "Коли функція завершиться, Execution Context (сіра рамка) обов'язково назавжди зникне зі стека. Але Lexical Environment (синій блок) може вижити в Heap (Купі), якщо на нього залишиться замикання (closure)!"
+                },
+                action: () => {
+                    document.getElementById('globalEc').classList.add('visible');
+                    document.getElementById('runEc').classList.add('visible');
+                    
+                    document.getElementById('valAdmin').className = 'val-primitive';
+                    document.getElementById('valAdmin').innerText = 'true';
+
+                    document.getElementById('lblThisRun').style.backgroundColor = 'transparent';
+                    document.getElementById('valThisRun').style.backgroundColor = 'transparent';
+                }
+            },
+            {
+                codeLine: null,
+                narration: {
+                    title: "5. Зв'язок з 'this'",
+                    what: "Значення this для функції run було визначено під час створення Контексту і записано як внутрішня властивість у її Environment Record.",
+                    why: "У сучасних специфікаціях ECMAScript (від ES6) this не літає у повітрі. Він є повноцінною частиною 'Function Environment Record'. Оскільки функція була викликана без об'єкта-передавця (просто run()), this вказує на globalThis.",
+                    insight: "Pro Tip: Чому стрілкові функції не мають власного this? Бо вони просто не ініціалізують цей запис в своєму Environment Record! Коли ви пишете this у стрілці, рушій шукає його тут, не знаходить і піднімається вище по [[OuterEnv]]."
+                },
+                action: () => {
+                    document.getElementById('globalEc').classList.add('visible');
+                    document.getElementById('runEc').classList.add('visible');
+                    
+                    document.getElementById('valAdmin').className = 'val-primitive';
+                    document.getElementById('valAdmin').innerText = 'true';
+
+                    // Highlight the this record to focus attention
+                    document.getElementById('lblThisRun').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                    document.getElementById('valThisRun').style.backgroundColor = 'rgba(241, 196, 15, 0.4)';
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

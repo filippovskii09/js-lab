@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Identifier Resolution Algorithm</title>
+    <!-- Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .kw-err { color: #e74c3c; font-weight: bold; }
+        
+        .memory-layout {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+        }
+        .col-env {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            position: relative;
+        }
+        
+        /* Search Pointer */
+        .search-pointer {
+            position: absolute;
+            right: -25px;
+            width: 20px;
+            height: 20px;
+            background: #f1c40f;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            box-shadow: 0 0 10px rgba(241, 196, 15, 0.8);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0;
+            z-index: 10;
+        }
+        .search-pointer::before {
+            content: '🔎';
+            font-size: 16px;
+            position: absolute;
+            left: -25px;
+        }
+
+        /* Highlight classes for search */
+        .searching {
+            border-color: #f1c40f !important;
+            box-shadow: inset 0 0 15px rgba(241, 196, 15, 0.2);
+        }
+        .found {
+            background-color: #d5f5e3 !important;
+            transition: background-color 0.3s;
+        }
+        .not-found {
+            background-color: #fadbd8 !important;
+            transition: background-color 0.3s;
+        }
+        
+        /* Pseudo-terminal trace */
+        .trace-panel {
+            background: #1e1e1e;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: 'Consolas', monospace;
+            font-size: 12px;
+            color: #d4d4d4;
+            height: 100%;
+            border: 2px solid #444;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            line-height: 1.5;
+            overflow-y: auto;
+        }
+        .trace-line { display: none; margin-bottom: 4px; border-left: 2px solid transparent; padding-left: 8px; }
+        .trace-line.visible { display: block; animation: slideInRight 0.3s ease-out; }
+        .trace-line.active { border-color: #f1c40f; background: rgba(241, 196, 15, 0.1); }
+        .t-call { color: #56b6c2; }
+        .t-str { color: #ce9178; }
+        .t-true { color: #b5cea8; font-weight: bold; }
+        .t-false { color: #f48771; font-weight: bold; }
+        .t-err { color: #f48771; font-weight: bold; text-decoration: underline; }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Identifier Resolution (Алгоритм пошуку)</h2>
+    <p>Візуалізація рекурсивного підйому по ланцюжку Outer References при пошуку змінних</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">var</span> <span class="var">val</span> <span class="op">=</span> <span class="str">'global'</span>;</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">let</span> <span class="var">out</span> <span class="op">=</span> <span class="str">'outer'</span>;</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="kw">function</span> <span class="fn">shadowTest</span>() {</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  <span class="kw">const</span> <span class="var">val</span> <span class="op">=</span> <span class="str">'local'</span>;</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>  </div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">val</span>);     <span class="com">// (1) Затінення</span></div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">out</span>);     <span class="com">// (2) Рекурсія вгору</span></div>
+            <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span>  <span class="fn">console</span>.<span class="fn">log</span>(<span class="var">missing</span>); <span class="com">// (3) ReferenceError</span></div>
+            <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span>}</div>
+            <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span></div>
+            <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span><span class="fn">shadowTest</span>();</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ ТА ТРЕЙС -->
+        <div class="js-lab-stack">
+            <div class="memory-layout" style="height: 100%;">
+                
+                <!-- Environments -->
+                <div class="col-env" style="flex: 1.2;">
+                    <div class="js-lab-stack-title">Scope Chain (Ланцюг)</div>
+                    
+                    <div class="search-pointer" id="pointer"></div>
+
+                    <!-- Global Env -->
+                    <div class="lexical-env slot-zone visible" id="envGlobal">
+                        <div class="env-name">Global Env</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-table">
+                                <div id="var1-k">val:</div><div class="val-primitive" id="var1-v">"global"</div>
+                                <div id="var2-k">out:</div><div class="val-primitive" id="var2-v">"outer"</div>
+                                <div>shadowTest:</div><div class="val-reference">&lt;f()&gt;</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span id="glbOuter">[[OuterEnv]]:</span> <span style="font-weight:bold; color:#c0392b;">null</span>
+                        </div>
+                    </div>
+
+                    <!-- Function Env -->
+                    <div class="lexical-env slot-zone visible" id="envFunc">
+                        <div class="env-name">shadowTest Env</div>
+                        <div class="record-zone slot-zone">
+                            <div class="record-table">
+                                <div id="var3-k">val:</div><div class="val-primitive" id="var3-v">"local"</div>
+                            </div>
+                        </div>
+                        <div class="outer-zone slot-zone">
+                            <span id="funcOuter">[[OuterEnv]]:</span> <span style="font-weight:bold;">↳ Global Env</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Engine Trace -->
+                <div class="col-env" style="flex: 1.8;">
+                    <div class="js-lab-stack-title">Engine Execution Trace</div>
+                    <div class="trace-panel">
+                        <!-- Step 1 Trace -->
+                        <div class="trace-line trace-s1"><span class="t-call">GetIdentifierReference</span>(shadowTestEnv, <span class="t-str">'val'</span>)</div>
+                        <div class="trace-line trace-s1 trace-s1-1">&nbsp;&nbsp;HasBinding(<span class="t-str">'val'</span>) -> <span class="t-true">true</span></div>
+                        <div class="trace-line trace-s1 trace-s1-1">&nbsp;&nbsp;└─ Resolves to "local" (Shadowing)</div>
+                        
+                        <!-- Step 2 Trace -->
+                        <div class="trace-line trace-s2" style="margin-top:10px;"><span class="t-call">GetIdentifierReference</span>(shadowTestEnv, <span class="t-str">'out'</span>)</div>
+                        <div class="trace-line trace-s2 trace-s2-1">&nbsp;&nbsp;HasBinding(<span class="t-str">'out'</span>) -> <span class="t-false">false</span></div>
+                        <div class="trace-line trace-s2 trace-s2-2">&nbsp;&nbsp;[[OuterEnv]] !== null -> Recurse!</div>
+                        
+                        <div class="trace-line trace-s2 trace-s2-3"><span class="t-call">GetIdentifierReference</span>(GlobalEnv, <span class="t-str">'out'</span>)</div>
+                        <div class="trace-line trace-s2 trace-s2-4">&nbsp;&nbsp;HasBinding(<span class="t-str">'out'</span>) -> <span class="t-true">true</span></div>
+                        <div class="trace-line trace-s2 trace-s2-4">&nbsp;&nbsp;└─ Resolves to "outer"</div>
+
+                        <!-- Step 3 Trace -->
+                        <div class="trace-line trace-s3" style="margin-top:10px;"><span class="t-call">GetIdentifierReference</span>(shadowTestEnv, <span class="t-str">'missing'</span>)</div>
+                        <div class="trace-line trace-s3 trace-s3-1">&nbsp;&nbsp;HasBinding(<span class="t-str">'missing'</span>) -> <span class="t-false">false</span></div>
+                        <div class="trace-line trace-s3 trace-s3-1">&nbsp;&nbsp;[[OuterEnv]] !== null -> Recurse!</div>
+                        
+                        <div class="trace-line trace-s3 trace-s3-2"><span class="t-call">GetIdentifierReference</span>(GlobalEnv, <span class="t-str">'missing'</span>)</div>
+                        <div class="trace-line trace-s3 trace-s3-3">&nbsp;&nbsp;HasBinding(<span class="t-str">'missing'</span>) -> <span class="t-false">false</span></div>
+                        <div class="trace-line trace-s3 trace-s3-4">&nbsp;&nbsp;[[OuterEnv]] === null -> STOP!</div>
+                        <div class="trace-line trace-s3 trace-s3-4">&nbsp;&nbsp;└─ Return <span class="t-err">ReferenceError</span></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    function pointerTo(envId) {
+        const ptr = document.getElementById('pointer');
+        ptr.style.opacity = 1;
+        if (envId === 'func') {
+            ptr.style.top = '190px'; // roughly middle of func env
+        } else if (envId === 'global') {
+            ptr.style.top = '70px'; // roughly middle of global env
+        } else {
+            ptr.style.opacity = 0;
+        }
+    }
+
+    function clearStates() {
+        document.querySelectorAll('.found, .not-found, .searching').forEach(el => {
+            el.classList.remove('found', 'not-found', 'searching');
+        });
+        document.querySelectorAll('.trace-line').forEach(el => {
+            el.classList.remove('visible', 'active');
+        });
+        pointerTo('none');
+    }
+
+    function animateSequence(stepsArr) {
+        let delay = 0;
+        stepsArr.forEach((step, idx) => {
+            setTimeout(() => step(), delay);
+            delay += 800; // 800ms per sub-step
+        });
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                action: () => {
+                    clearStates();
+                },
+                narration: {
+                    title: "Попередній стан: Scope Chain",
+                    what: "Виконання зупинилось всередині функції shadowTest. У нас є ланцюжок із двох Lexical Environments: поточний (shadowTest) та зовнішній (Global).",
+                    why: "Згідно зі специфікацією, коли JavaScript-код згадує змінну за ім'ям, рушій виконує чіткий абстрактний алгоритм GetIdentifierReference(env, name).",
+                    insight: "Зараз ми подивимось, як цей алгоритм відпрацьовує рекурсивно крок за кроком для трьох різних сценаріїв."
+                }
+            },
+            {
+                codeLine: 'line7',
+                action: () => {
+                    clearStates();
+                    // Animate Sub-steps
+                    animateSequence([
+                        // 1. Point to func env & show s1 trace
+                        () => {
+                            pointerTo('func');
+                            document.getElementById('envFunc').classList.add('searching');
+                            document.querySelectorAll('.trace-s1:not(.trace-s1-1)').forEach(e => { e.classList.add('visible', 'active'); });
+                        },
+                        // 2. Found 'val' local
+                        () => {
+                            document.getElementById('var3-k').classList.add('found');
+                            document.getElementById('var3-v').classList.add('found');
+                            document.querySelectorAll('.trace-s1.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s1-1').forEach(e => { e.classList.add('visible', 'active'); });
+                        }
+                    ]);
+                },
+                narration: {
+                    title: "1. Миттєве вирішення (Затінення)",
+                    what: "Виклик console.log(val). Алгоритм перевіряє поточний Environment Record. Запис 'val' знайдено блискавично, повертається 'local'.",
+                    why: "Робота алгоритму завершується ПРИ ПЕРШОМУ Ж ЗБІГУ. Рушій не йде дивитися далі в [[OuterEnv]].",
+                    insight: "Це називається Затіненням (Shadowing). Глобальна змінна val='global' повністю недоступна через звичайне посилання, бо алгоритм ніколи до неї не дійде. Хоча фізично вона все ще лежить у пам'яті вище."
+                }
+            },
+            {
+                codeLine: 'line8',
+                action: () => {
+                    clearStates();
+                    animateSequence([
+                        // 1. Point to func env & search 'out'
+                        () => {
+                            pointerTo('func');
+                            document.getElementById('envFunc').classList.add('not-found');
+                            document.querySelectorAll('.trace-s2:not(.trace-s2-1):not(.trace-s2-2):not(.trace-s2-3):not(.trace-s2-4)').forEach(e => { e.classList.add('visible', 'active'); });
+                        },
+                        // 2. Not found locally, outer check
+                        () => {
+                            document.querySelectorAll('.trace-s2.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s2-1, .trace-s2-2').forEach(e => { e.classList.add('visible', 'active'); });
+                            document.getElementById('funcOuter').classList.add('found'); // highlight outer link
+                        },
+                        // 3. Move pointer up
+                        () => {
+                            pointerTo('global');
+                            document.getElementById('envFunc').classList.remove('not-found');
+                            document.getElementById('envGlobal').classList.add('searching');
+                            document.querySelectorAll('.trace-s2.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s2-3').forEach(e => { e.classList.add('visible', 'active'); });
+                            document.getElementById('funcOuter').classList.remove('found');
+                        },
+                        // 4. Found globally
+                        () => {
+                            document.getElementById('var2-k').classList.add('found');
+                            document.getElementById('var2-v').classList.add('found');
+                            document.querySelectorAll('.trace-s2.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s2-4').forEach(e => { e.classList.add('visible', 'active'); });
+                        }
+                    ]);
+                },
+                narration: {
+                    title: "2. Рекурсивний підйом по ланцюжку",
+                    what: "Алгоритм шукає 'out'. Не знаходить локально → бачить, що [[OuterEnv]] вказує на Global Env → робить рекурсивний перехід у Global Env → знаходить там.",
+                    why: "Метод HasBinding повертає false. Алгоритм зчитує вказівник [[OuterEnv]] і викликає сам себе заново (передаючи середовище, що лежить вище) поки не знайде ім'я.",
+                    insight: "Хоч за специфікацією це виглядає як 'повільна рекурсія в Runtime', насправді рушій V8 статично аналізує цей ланцюг ще під час компіляції (Static Scope Mapping) і підставляє прямі індекси пам'яті (крім випадків з with() або eval())."
+                }
+            },
+            {
+                codeLine: 'line9',
+                action: () => {
+                    clearStates();
+                    animateSequence([
+                        // 1. Check func locally
+                        () => {
+                            pointerTo('func');
+                            document.getElementById('envFunc').classList.add('not-found');
+                            document.querySelectorAll('.trace-s3:not(.trace-s3-1):not(.trace-s3-2):not(.trace-s3-3):not(.trace-s3-4)').forEach(e => { e.classList.add('visible', 'active'); });
+                        },
+                        // 2. move to global
+                        () => {
+                            document.querySelectorAll('.trace-s3.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s3-1').forEach(e => { e.classList.add('visible', 'active'); });
+                            pointerTo('global');
+                            document.getElementById('envFunc').classList.remove('not-found');
+                            document.getElementById('envGlobal').classList.add('not-found');
+                        },
+                        // 3. Not found globally, check null
+                        () => {
+                            document.querySelectorAll('.trace-s3.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s3-2, .trace-s3-3').forEach(e => { e.classList.add('visible', 'active'); });
+                            document.getElementById('glbOuter').classList.add('found'); // highlight null
+                        },
+                        // 4. Return error
+                        () => {
+                            pointerTo('none');
+                            document.getElementById('envGlobal').classList.remove('not-found');
+                            document.querySelectorAll('.trace-s3.active').forEach(e => e.classList.remove('active'));
+                            document.querySelectorAll('.trace-s3-4').forEach(e => { e.classList.add('visible', 'active'); });
+                        }
+                    ]);
+                },
+                narration: {
+                    title: "3. Провал (ReferenceError)",
+                    what: "Пошук змінної 'missing'. Алгоритм провалюється локально → переходить у Global Env. Провалюється глобально → дивиться в [[OuterEnv]]. А там — null.",
+                    why: "Згідно специфікації, якщо env === null, алгоритм зупиняється і формує спеціальний об'єкт Reference з прапорцем 'unresolvable'. Під час читання такого об'єкта викидається помилка ReferenceError.",
+                    insight: "Global Environment — це завжди крайня точка світу JavaScript. Його [[OuterEnv]] жорстко зафіксований на null, тому рекурсія ніколи не буває безкінечною."
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

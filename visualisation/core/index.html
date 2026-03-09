@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Base Visualizer Template</title>
+    <!-- 1. Підключаємо глобальну тему -->
+    <link rel="stylesheet" href="./theme.css">
+    <style>
+        /* Специфічні стилі для конкретної візуалізації, якщо потрібно */
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Basic Visualization Engine</h2>
+    <p>Шаблон на базі theme.css та engine.js</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / X</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">let</span> <span class="var">example</span> = <span class="str">'Demo'</span>;</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="com">// Some code execution...</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Execution Context Stack</div>
+            <div class="js-lab-stack-container" id="stack">
+                
+                <!-- Приклад візуального блоку оточення -->
+                <div class="lexical-env slot-zone" id="envBlock">
+                    <div class="env-name">Global Environment</div>
+                    <div class="record-zone slot-zone">
+                        <div class="record-title">1. Environment Record</div>
+                        <div class="record-table">
+                            <div>example:</div><div id="valExample" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 2. Підключаємо Engine -->
+<script type="module">
+    import { JSLabEngine } from './engine.js';
+
+    // 3. Створюємо масив кроків
+    const steps = [
+        {
+            codeLine: null,
+            narration: {
+                title: "Creation Phase",
+                what: "Відбулася ініціалізація змінної у пам'яті.",
+                why: "На етапі компіляції рушій виділив пам'ять, але ще не виконав присвоєння.",
+                insight: "Змінна перебуває у стані uninitialized."
+            },
+            action: () => {
+                document.getElementById('envBlock').classList.add('visible');
+                document.getElementById('valExample').className = 'val-uninit';
+                document.getElementById('valExample').innerText = '<uninitialized>';
+            }
+        },
+        {
+            codeLine: 'line1',
+            narration: {
+                title: "Execution Phase",
+                what: "Змінній привласнено значення 'Demo'.",
+                why: "Рушій дійшов до першого рядка і привласнив літерал рядка змінній.",
+                insight: "Тепер до змінної можна безпечно звертатися."
+            },
+            action: () => {
+                document.getElementById('envBlock').classList.add('visible');
+                document.getElementById('valExample').className = 'val-primitive';
+                document.getElementById('valExample').innerText = '"Demo"';
+            }
+        }
+    ];
+
+    // 4. Ініціалізуємо
+    const engine = new JSLabEngine({ steps });
+    engine.init();
+</script>
+
+</body>
+</html>
