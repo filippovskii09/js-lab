@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Immutability & Performance (Shallow vs Deep)</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        .kw { color: #c678dd; }
+        .fn { color: #61afef; }
+        
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        #globalEnv .record-zone { border-color: #3498db; }
+        
+        .val-ref-address { color: #8e44ad; font-weight: bold; background: #f4ecf7; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        
+        .heap-obj { display: none; border-color: #9b59b6; background: #faf5fb; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #8e44ad; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #d2b4de; padding-bottom: 5px; margin-bottom: 8px; }
+        
+        #heap-container { 
+            border-color: #e67e22; 
+            background: #fdfefe;
+            align-items: stretch;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .mutated-val {
+            animation: highlightMutate 1.5s ease;
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        @keyframes highlightMutate {
+            0% { background-color: #f1c40f; color: #fff; }
+            100% { background-color: transparent; color: #e74c3c; }
+        }
+
+        .frozen {
+            border: 2px solid #3498db;
+            background: #eaf2f8;
+            position: relative;
+        }
+        .frozen::after {
+            content: '❄️ FROZEN';
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: #3498db;
+            color: white;
+            font-size: 10px;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>Immutability Patterns & Performance</h2>
+    <p>Дослідження Shallow Copy, Deep Copy та Shallow Freeze поведінки у складених структурах.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.2;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">app</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  theme: <span class="str">"dark"</span>,</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  user: { role: <span class="str">"Admin"</span> }</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>}<span class="op">;</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="com">// Shallow Copy</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">const</span> <span class="var">shallow</span> <span class="op">=</span> { ...<span class="var">app</span> }<span class="op">;</span></div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="var">shallow</span>.<span class="fn">user</span>.<span class="fn">role</span> <span class="op">=</span> <span class="str">"User"</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line9"><span class="js-lab-line-num">9</span></div>
+            <div class="js-lab-line" id="line10"><span class="js-lab-line-num">10</span><span class="com">// Deep Copy</span></div>
+            <div class="js-lab-line" id="line11"><span class="js-lab-line-num">11</span><span class="kw">const</span> <span class="var">deep</span> <span class="op">=</span> <span class="fn">structuredClone</span>(<span class="var">app</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line12"><span class="js-lab-line-num">12</span></div>
+            <div class="js-lab-line" id="line13"><span class="js-lab-line-num">13</span><span class="com">// Shallow Freeze</span></div>
+            <div class="js-lab-line" id="line14"><span class="js-lab-line-num">14</span><span class="var">Object</span>.<span class="fn">freeze</span>(<span class="var">app</span>)<span class="op">;</span></div>
+            <div class="js-lab-line" id="line15"><span class="js-lab-line-num">15</span><span class="var">app</span>.<span class="fn">user</span>.<span class="fn">role</span> <span class="op">=</span> <span class="str">"Hacked"</span><span class="op">;</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК ТА КУПА -->
+        <div style="display: flex; flex-direction: column; gap: 15px; flex: 1.8;">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: unset; padding: 15px; min-height: 160px;">
+                <div class="js-lab-stack-title" style="margin-bottom: 10px; font-size: 14px;">Stack (Environment Record)</div>
+                <div class="js-lab-stack-container" id="stack" style="max-width: 100%;">
+                    <div class="lexical-env slot-zone visible" id="globalEnv" style="margin-bottom: 0;">
+                        <div class="record-table">
+                            <div style="font-weight:bold;">app:</div><div id="valApp" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div style="font-weight:bold;">shallow:</div><div id="valShallow" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div style="font-weight:bold;">deep:</div><div id="valDeep" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heap -->
+            <div class="js-lab-stack" id="heap-container" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; margin-bottom: 10px; font-size: 14px;">Heap Memory</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; max-width: 100%; gap: 10px; overflow-y: auto;">
+                    
+                    <div id="heapAppObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xFF10 (app) <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>theme:</div><div class="val-primitive">"dark"</div>
+                            <div>user:</div><div class="val-reference">&lt;ref: <span class="val-ref-address">0xAA22</span>&gt;</div>
+                        </div>
+                    </div>
+
+                    <div id="heapUserObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xAA22 (app.user) <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>role:</div><div id="heapRoleVal" class="val-primitive">"Admin"</div>
+                        </div>
+                    </div>
+
+                    <div id="heapShallowObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xDD55 (shallow) <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>theme:</div><div class="val-primitive">"dark"</div>
+                            <div>user:</div><div class="val-reference">&lt;ref: <span class="val-ref-address">0xAA22</span>&gt;</div>
+                        </div>
+                    </div>
+
+                    <div id="heapDeepObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xEE99 (deep) <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>theme:</div><div class="val-primitive">"dark"</div>
+                            <div>user:</div><div class="val-reference">&lt;ref: <span class="val-ref-address">0xBB44</span>&gt;</div>
+                        </div>
+                    </div>
+
+                    <div id="heapDeepUserObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0xBB44 (deep.user) <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>role:</div><div class="val-primitive">"Admin"</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: ['line1', 'line2', 'line3', 'line4'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Початковий стан (Nested Objects)",
+                    what: "Створено об'єкт app. Вкладений об'єкт user створюється у Heap окремо і app зберігає на нього посилання (0xAA22).",
+                    why: "Об'єкти не можуть зберігати об'єкти всередині себе як матрицю. Властивість об'єкта user — це просто ще один Pointer на іншу адресу в Купі.",
+                    insight: "Оскільки це Nested Object, копіювання головного об'єкта (0xFF10) скопіює лише посилання на вкладений (0xAA22), створюючи ризик прихованих мутацій."
+                },
+                action: () => {
+                    document.getElementById('valApp').innerHTML = '&lt;ref: <span class="val-ref-address">0xFF10</span>&gt;';  
+                    document.getElementById('valApp').className = 'val-reference';
+                    
+                    document.getElementById('heapAppObj').classList.add('visible');
+                    document.getElementById('heapUserObj').classList.add('visible');
+                    
+                    document.getElementById('heapShallowObj').classList.remove('visible');
+                    document.getElementById('heapDeepObj').classList.remove('visible');
+                    document.getElementById('heapDeepUserObj').classList.remove('visible');
+                    
+                    document.getElementById('heapRoleVal').innerText = '"Admin"';
+                    document.getElementById('heapRoleVal').classList.remove('mutated-val');
+                    document.getElementById('heapAppObj').classList.remove('frozen');
+                }
+            },
+            {
+                codeLine: ['line7', 'line8'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Shallow Copy & Mutation (Spread)",
+                    what: "Створюється shallow копія (0xDD55). Зміна shallow.user.role на 'User' мутує й оригінальний app.user.",
+                    why: "Spread-оператор { ...app } копіює значення лише на 1-му рівні. Він створив новий об'єкт, але властивість user скопіювалася як адреса 0xAA22.",
+                    insight: "Хоча shallow є новим об'єктом у Heap, він усе ще має Shared State зі старим app через однаковий вкладений покажчик 0xAA22. Мутація гарантована."
+                },
+                action: () => {
+                    document.getElementById('valShallow').innerHTML = '&lt;ref: <span class="val-ref-address">0xDD55</span>&gt;';  
+                    document.getElementById('valShallow').className = 'val-reference';
+                    
+                    document.getElementById('heapShallowObj').classList.add('visible');
+                    
+                    document.getElementById('heapRoleVal').innerText = '"User"';
+                    document.getElementById('heapRoleVal').classList.add('mutated-val');
+                }
+            },
+            {
+                codeLine: ['line11'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Deep Copy (structuredClone)",
+                    what: "Створюється deep копія. І головний об'єкт (0xEE99), і вкладений об'єкт (0xBB44) є цілком новими.",
+                    why: "structuredClone() рекурсивно проходить всі вкладені об'єкти і створює їх точні, але фізично незалежні копії у Heap.",
+                    insight: "Це єдиний нативний і дуже швидкий (на відміну від JSON.parse) спосіб гарантувати відсутність мутацій на всіх рівнях об'єкта. Тепер deep.user можна змінювати безпечно."
+                },
+                action: () => {
+                    document.getElementById('valDeep').innerHTML = '&lt;ref: <span class="val-ref-address">0xEE99</span>&gt;';  
+                    document.getElementById('valDeep').className = 'val-reference';
+                    
+                    document.getElementById('heapDeepObj').classList.add('visible');
+                    document.getElementById('heapDeepUserObj').classList.add('visible');
+                    
+                    // Reset mutation animation for original
+                    document.getElementById('heapRoleVal').classList.remove('mutated-val');
+                }
+            },
+            {
+                codeLine: ['line14'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Shallow Freeze (Object.freeze)",
+                    what: "Object.freeze(app) заморожує лише головний об'єкт 0xFF10.",
+                    why: "Метод встановлює всі поля 0xFF10 (Theme та вказівник на User) у стан Read-Only (переписує дескриптори Object.defineProperty).",
+                    insight: "Це називається Shallow (Поверхова) Заморозка. Самі цінні дані лежать за вказівником 0xAA22 (вкладений об'єкт), який взагалі НЕ ЗАМОРОЖЕНО!"
+                },
+                action: () => {
+                    document.getElementById('heapAppObj').classList.add('frozen');
+                    document.getElementById('heapRoleVal').innerText = '"User"';
+                    document.getElementById('heapRoleVal').classList.remove('mutated-val');
+                }
+            },
+            {
+                codeLine: ['line15'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Мутація Замороженого Об'єкта",
+                    what: "app.user.role успішно мутується на 'Hacked', ігноруючи Object.freeze.",
+                    why: "V8 перевіряє app (0xFF10) -> user. Вказівник 0xAA22 змінити не можна, але ми не міняємо вказівник. Ми міняємо дані в самому 0xAA22, який не заморожений.",
+                    insight: "Саме тому в серйозному ентерпрайзі пишуть власні утиліти deepFreeze(obj), які рекурсивно обходять всі ключі й заморожують кожен вкладений об'єкт у Heap."
+                },
+                action: () => {
+                    document.getElementById('heapRoleVal').innerText = '"Hacked"';
+                    document.getElementById('heapRoleVal').classList.add('mutated-val');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>

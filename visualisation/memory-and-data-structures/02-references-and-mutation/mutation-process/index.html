@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Reference & Mutation (The Const Paradox)</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; }
+        .num { color: #d19a66; }
+        .str { color: #98c379; }
+        
+        #globalEnv { border-color: #3498db; background: #ebf5fb; }
+        #globalEnv .env-name { color: #2980b9; border-color: #3498db; }
+        #globalEnv .record-zone { border-color: #3498db; }
+        
+        .val-ref-address { color: #8e44ad; font-weight: bold; background: #f4ecf7; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        
+        .heap-obj { display: none; border-color: #9b59b6; background: #faf5fb; margin-bottom: 10px; opacity: 0; transform: translateY(10px); transition: all 0.3s ease; }
+        .heap-obj.visible { display: block; opacity: 1; transform: translateY(0); }
+        .heap-obj .record-title { color: #8e44ad; font-family: monospace; font-size: 14px; border-bottom: 1px dashed #d2b4de; padding-bottom: 5px; margin-bottom: 8px; }
+        
+        #heap-container { 
+            border-color: #e67e22; 
+            background: #fdfefe;
+            align-items: stretch;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .mutated-val {
+            animation: highlightMutate 1.5s ease;
+            color: #e74c3c;
+            font-weight: bold;
+        }
+
+        @keyframes highlightMutate {
+            0% { background-color: #f1c40f; color: #fff; }
+            100% { background-color: transparent; color: #e74c3c; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="js-lab-visualizer"></div>
+
+<script type="module">
+    import { JSLabEngine } from '../../../core/engine.js';
+
+    const visualizer = document.getElementById('js-lab-visualizer');
+    
+    visualizer.innerHTML = `
+<div class="js-lab-header">
+    <h2>Reference & Mutation (Мутації)</h2>
+    <p>Дослідження The Const Paradox та Shared Mutable State між змінними, що вказують на одну пам'ять.</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 4</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code" style="flex: 1.2;">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  role: <span class="str">"User"</span></div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>}<span class="op">;</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span></div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">const</span> <span class="var">admin</span> <span class="op">=</span> <span class="var">user</span><span class="op">;</span></div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="var">admin</span>.<span class="fn">role</span> <span class="op">=</span> <span class="str">"Admin"</span><span class="op">;</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК ТА КУПА -->
+        <div style="display: flex; flex-direction: column; gap: 15px; flex: 1.8;">
+            <!-- Stack -->
+            <div class="js-lab-stack" style="flex: unset; padding: 15px; min-height: 160px;">
+                <div class="js-lab-stack-title" style="margin-bottom: 10px; font-size: 14px;">Stack (Environment Record)</div>
+                <div class="js-lab-stack-container" id="stack" style="max-width: 100%;">
+                    <div class="lexical-env slot-zone visible" id="globalEnv" style="margin-bottom: 0;">
+                        <div class="record-table">
+                            <div style="font-weight:bold;">user:</div><div id="valUser" class="val-uninit">&lt;uninitialized&gt;</div>
+                            <div style="font-weight:bold;">admin:</div><div id="valAdmin" class="val-uninit">&lt;uninitialized&gt;</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heap -->
+            <div class="js-lab-stack" id="heap-container" style="flex: 1; padding: 15px;">
+                <div class="js-lab-stack-title" style="color: #d35400; margin-bottom: 10px; font-size: 14px;">Heap Memory (Old/New Space)</div>
+                <div class="js-lab-stack-container" style="flex-direction: column; justify-content: flex-start; max-width: 100%; gap: 10px;">
+                    
+                    <div id="heapUserObj" class="record-zone slot-zone heap-obj">
+                        <div class="record-title">@0x11B33 <span style="color:#7f8c8d;font-size:11px;">(Object)</span></div>
+                        <div class="record-table">
+                            <div>role:</div><div id="heapRoleVal" class="val-primitive">"User"</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Senior Insight:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+    `;
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Початковий стан (TDZ)",
+                    what: "Ідентифікатори user та admin зареєстровані у стеку, але не ініціалізовані.",
+                    why: "Виділяється Environment Record для виконання скрипта. const гарантує, що змінні в TDZ недоступні.",
+                    insight: "Змінні ще не мають вказівників, тому Heap повністю спить."
+                },
+                action: () => {
+                    document.getElementById('valUser').innerText = '<uninitialized>';  
+                    document.getElementById('valUser').className = 'val-uninit';
+                    document.getElementById('valAdmin').innerText = '<uninitialized>';  
+                    document.getElementById('valAdmin').className = 'val-uninit';
+                    document.getElementById('heapUserObj').classList.remove('visible');
+                    document.getElementById('heapRoleVal').innerText = '"User"';
+                    document.getElementById('heapRoleVal').classList.remove('mutated-val');
+                }
+            },
+            {
+                codeLine: ['line1', 'line2', 'line3'],
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Алокація об'єкта (Pass by Reference)",
+                    what: "user отримує посилання <ref: 0x11B33> на об'єкт, створений у Heap.",
+                    why: "Фізичний об'єкт завеликий і може рости, його зберігають у Nursery Generation. Стек отримує виключно 64-бітний вказівник на його адресу.",
+                    insight: "Значення const 'user' — це не сам об'єкт, а саме ця АДРЕСА 0x11B33. Вона стала константою, і її вже ніколи не можна замінити на 0x77A12."
+                },
+                action: () => {
+                    document.getElementById('valUser').innerHTML = '&lt;ref: <span class="val-ref-address">0x11B33</span>&gt;';  
+                    document.getElementById('valUser').className = 'val-reference';
+                    document.getElementById('heapUserObj').classList.add('visible');
+                }
+            },
+            {
+                codeLine: 'line5',
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Копіювання вказівника (Shared Reference)",
+                    what: "Змінній admin привласнюється ЗНАЧЕННЯ змінної user. Тобто просто копіюється адреса 0x11B33.",
+                    why: "Оскільки user у стеку зберігає адресу, JS виконує тривіальне Shallow Copy цієї адреси для admin. Сам об'єкт у Heap НЕ копіюється.",
+                    insight: "Це народження Shared Mutable State. Два незалежних ідентифікатори у стеку тепер дивляться на одну й ту саму фізичну структуру в Heap."
+                },
+                action: () => {
+                    document.getElementById('valAdmin').innerHTML = '&lt;ref: <span class="val-ref-address">0x11B33</span>&gt;';  
+                    document.getElementById('valAdmin').className = 'val-reference';
+                }
+            },
+            {
+                codeLine: 'line7',
+                state: { stack: [], heap: {} },
+                narration: {
+                    title: "Мутація (The Const Paradox)",
+                    what: "Через admin змінюється вміст об'єкта у Heap. 'User' перетворюється на 'Admin'.",
+                    why: "Вираз admin.role йде по вказівнику 0x11B33 в Heap і міняє біти там. Змінна admin залишилася константою (адреса не змінилася!). Тому const не викинув помилку.",
+                    insight: "Це критична зона ризику. Оскільки user теж вказує на 0x11B33, user.role тепер також 'Admin'. const захищає вказівник у Стеку, а не структуру в Heap!"
+                },
+                action: () => {
+                    document.getElementById('heapRoleVal').innerText = '"Admin"';
+                    document.getElementById('heapRoleVal').classList.add('mutated-val');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
