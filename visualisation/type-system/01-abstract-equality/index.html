@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Abstract Equality Algorithm (==)</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .val-arr { color: #e5c07b; } /* Масив */
+        .val-bool { color: #d19a66; } /* Булеві */
+        .val-num { color: #d19a66; } /* Числа */
+        .val-str { color: #98c379; } /* Рядки */
+        
+        .slot-zone { margin-bottom: 10px; padding: 10px; border: 1px solid #3e4451; border-radius: 4px; background: #282c34; }
+        .slot-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #abb2bf; text-transform: uppercase; }
+        
+        #exprState { display: flex; flex-direction: column; gap: 10px; font-family: monospace; font-size: 16px; margin-top: 20px;}
+        .expr-step { padding: 10px; border-left: 3px solid #61afef; background: #1e2227; color: #abb2bf; }
+        .expr-step.active { border-color: #98c379; background: #2c313a; color: #fff; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Abstract Equality: [] == ![]</h2>
+    <p>Каскадна конверсія типів у V8: Крок за кроком</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">result</span> <span class="op">=</span> <span class="val-arr">[]</span> <span class="op">==</span> <span class="op">!</span><span class="val-arr">[]</span>;</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="fn">console.log</span>(result); <span class="com">// true</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ВІЗУАЛІЗАЦІЯ ПЕРЕТВОРЕНЬ -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Алгоритм ECMA-262 (Abstract Equality)</div>
+            <div class="js-lab-stack-container" id="stack">
+                <div class="slot-zone">
+                    <div class="slot-title">Поточне рівняння в рушії:</div>
+                    <div id="equationDisplay" style="font-size: 20px; font-family: monospace; text-align: center; padding: 20px 0; color: #fff;">
+                        [] == ![]
+                    </div>
+                </div>
+                
+                <div id="exprState">
+                    <div class="expr-step" id="step1">1. ![] -> !truthy -> false</div>
+                    <div class="expr-step" id="step2">2. [] == false</div>
+                    <div class="expr-step" id="step3">3. ToNumber(false) -> 0</div>
+                    <div class="expr-step" id="step4">4. [] == 0</div>
+                    <div class="expr-step" id="step5">5. ToPrimitive([]) -> ""</div>
+                    <div class="expr-step" id="step6">6. ToNumber("") -> 0</div>
+                    <div class="expr-step" id="step7" style="border-color: #e5c07b;">7. 0 == 0 -> true</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setActiveStep(id, eq) {
+        document.querySelectorAll('.expr-step').forEach(el => el.classList.remove('active'));
+        if(id) document.getElementById(id).classList.add('active');
+        document.getElementById('equationDisplay').innerText = eq;
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Початковий стан: [] == ![]",
+                    what: "Рушій намагається порівняти пустий масив і результат виразу ![]",
+                    why: "Перш ніж викликати Abstract Equality Comparison, JavaScript має обчислити всі операнди. Оператор '!' (Логічне НІ) має вищий пріоритет за '=='.",
+                    insight: "У JS будь-який об'єкт (навіть порожній масив) — це 'truthy' значення."
+                },
+                action: () => setActiveStep(null, "[] == ![]")
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Логічне заперечення (!)",
+                    what: "![] перетворюється на false.",
+                    why: "Оскільки масив [] є існуючим об'єктом в Heap (truthy), оператор !truthy повертає false. Тепер маємо: [] == false.",
+                    insight: "Заперечення завжди повертає строгий Boolean тип."
+                },
+                action: () => setActiveStep('step1', "[] == false")
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Правило Number vs Boolean",
+                    what: "Boolean (false) конвертується в Number (0).",
+                    why: "За стандартом ECMA, якщо один з операндів у == є Boolean, він пропускається через ToNumber(Boolean). false стає 0.",
+                    insight: "Це правило №4 алгоритму Abstract Equality. Булеві значення ніколи не порівнюються 'як є', вони завжди стають числами."
+                },
+                action: () => {
+                    document.getElementById('step1').classList.remove('active');
+                    document.getElementById('step2').classList.add('active');
+                    document.getElementById('step3').classList.add('active');
+                    setActiveStep('step4', "[] == 0");
+                }
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Правило Object vs Number",
+                    what: "Масив [] конвертується в примітив через ToPrimitive([]). Результат — порожній рядок (\"\").",
+                    why: "Якщо один операнд Object ([]), а інший — Number (0), рушій викликає ToPrimitive(Object). У масивів це викликає метод toString(), який склеює елементи (яких нема) і повертає \"\".",
+                    insight: "Це правило №5 алгоритму. Об'єкти завжди зводяться до примітивів перед порівнянням."
+                },
+                action: () => {
+                    document.getElementById('step5').classList.add('active');
+                    setActiveStep('step5', "\"\" == 0");
+                }
+            },
+            {
+                codeLine: 'line1',
+                narration: {
+                    title: "Правило String vs Number",
+                    what: "Рядок \"\" конвертується в число через ToNumber(\"\"). Результат — 0.",
+                    why: "Тепер ми порівнюємо String і Number. За стандартом, рядок пропускається через ToNumber(). Пустий рядок (або рядок лише з пробілів) стає числовим нулем 0.",
+                    insight: "Ось чому \"\" == 0 дає true, але \" \" == 0 також дає true."
+                },
+                action: () => {
+                    document.getElementById('step6').classList.add('active');
+                    setActiveStep('step6', "0 == 0");
+                }
+            },
+            {
+                codeLine: 'line2',
+                narration: {
+                    title: "Фінальне порівняння: 0 == 0",
+                    what: "Оскільки типи тепер однакові (Number vs Number), рушій застосовує Strict Equality (===).",
+                    why: "0 === 0 є істинним. Алгоритм згортається і повертає true.",
+                    insight: "Зовні безглуздий вираз [] == ![] обчислюється як true виключно через строгі та послідовні правила ECMA-262."
+                },
+                action: () => {
+                    document.getElementById('step7').classList.add('active');
+                    setActiveStep('step7', "true");
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
