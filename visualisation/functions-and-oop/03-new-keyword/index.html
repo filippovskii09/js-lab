@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>The 'new' Keyword Algorithm</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .val-num { color: #d19a66; } /* Числа */
+        .val-str { color: #98c379; } /* Рядки */
+        .pointer { color: #c678dd; font-weight: bold; } /* Адреси Heap */
+        
+        .slot-zone { margin-bottom: 10px; padding: 10px; border: 1px solid #3e4451; border-radius: 4px; background: #282c34;}
+        .slot-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #abb2bf; text-transform: uppercase; }
+        
+        /* Algorithm Steps */
+        .step-list { font-family: monospace; font-size: 14px; color: #abb2bf; }
+        .step-item { padding: 8px 12px; border-left: 3px solid #4b5363; margin-bottom: 8px; background: #1e2227; transition: all 0.3s; }
+        .step-item.active { border-color: #98c379; background: #2c313a; color: #fff; font-weight: bold; transform: translateX(5px); }
+        .step-item.done { border-color: #61afef; opacity: 0.7; }
+        
+        /* Objects In Memory */
+        .mem-obj { border: 1px solid #61afef; padding: 10px; margin-top: 15px; background: #282c34; border-radius: 4px; display: none; }
+        .mem-obj.visible { display: block; animation: zoomIn 0.3s ease; }
+        .mem-header { color: #e5c07b; font-weight: bold; margin-bottom: 5px; border-bottom: 1px dashed #4b5363; padding-bottom: 5px; }
+        .mem-row { display: flex; justify-content: space-between; font-family: monospace; font-size: 13px; color: #abb2bf; }
+        .link-text { color: #c678dd; }
+        
+        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>The 'new' Keyword Algorithm</h2>
+    <p>4 кроки операції [[Construct]] під капотом ES6 Classes</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">class</span> <span class="fn">User</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="fn">constructor</span>(<span class="var">name</span>) {</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>    <span class="kw">this</span>.<span class="var">name</span> <span class="op">=</span> <span class="var">name</span>;</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>  }</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>}</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">const</span> <span class="var">user</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">User</span>(<span class="val-str">'Artur'</span>);</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: АЛГОРИТМ -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">[[Construct]] Execution</div>
+            
+            <div class="step-list">
+                <div class="step-item" id="algStep0">0. Ініціалізація Класу (No 'new' yet)</div>
+                <div class="step-item" id="algStep1">1. Allocate: {} (нове місце в пам'яті)</div>
+                <div class="step-item" id="algStep2">2. Link: [[Prototype]] = User.prototype</div>
+                <div class="step-item" id="algStep3">3. Bind 'this': Execute constructor body</div>
+                <div class="step-item" id="algStep4">4. Return: Повернути 'this' неявно</div>
+            </div>
+            
+            <div class="js-lab-stack-title" style="margin-top: 15px;">Heap Memory State</div>
+            
+            <div class="mem-obj visible" id="objProto">
+                <div class="mem-header">User.prototype [0xPROTO]</div>
+                <div class="mem-row"><span>constructor:</span> <span>[Function: User]</span></div>
+            </div>
+            
+            <div class="mem-obj" id="objNew">
+                <div class="mem-header">New Instance [0xINST1]</div>
+                <div class="mem-row" id="rowProto"><span>[[Prototype]]:</span> <span style="color:#e06c75;">null</span></div>
+                <div class="mem-row" id="rowName" style="display:none;"><span>name:</span> <span class="str">'Artur'</span></div>
+            </div>
+            
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setAlgActive(stepId) {
+        document.querySelectorAll('.step-item').forEach(el => {
+            el.classList.remove('active');
+            if (el.id < stepId && stepId !== 'algStep0') {
+                el.classList.add('done');
+            } else {
+                el.classList.remove('done');
+            }
+        });
+        if (stepId) document.getElementById(stepId).classList.add('active');
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "Старт: Оголошення класу",
+                    what: "Клас User зчитано рушієм у пам'ять, але жодних екземплярів не створено.",
+                    why: "Пам'ятайте, що клас - це лише функція. Під час її створення також генерується її об'єкт User.prototype (який містить посилання назад на constructor).",
+                    insight: "На відміну від function declarations, класи не 'спливають' (no hoisting), тому виклик до їх визначення кидає ReferenceError."
+                },
+                action: () => {
+                    setAlgActive('algStep0');
+                    document.getElementById('objNew').classList.remove('visible');
+                    document.getElementById('rowProto').innerHTML = '<span>[[Prototype]]:</span> <span style="color:#e06c75;">null</span>';
+                    document.getElementById('rowName').style.display = 'none';
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Крок 1: Allocation (Виділення пам'яті)",
+                    what: "Ключове слово 'new' перехоплює і керує процесом. Воно виділяє у Heap порожній об'єкт {}.",
+                    why: "Перш ніж ми почнемо застосовувати властивості до 'this', нам потрібен сам 'this'. Оператор new його створює.",
+                    insight: "Внутрішній метод [[Construct]] ініціюється виключно оператором new."
+                },
+                action: () => {
+                    setAlgActive('algStep1');
+                    document.getElementById('objNew').classList.add('visible');
+                    document.getElementById('rowProto').innerHTML = '<span>[[Prototype]]:</span> <span style="color:#e06c75;">null</span>';
+                    document.getElementById('rowName').style.display = 'none';
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Крок 2: Linking (Делегація прототипів)",
+                    what: "Внутрішня властивість [[Prototype]] щойно створеного об'єкта {}.[[Prototype]] прив'язується до User.prototype.",
+                    why: "Саме так об'єкти отримують доступ до спільних методів класу. Усі створені інстанси 'User' будуть дивитися на один словник у пам'яті.",
+                    insight: "Без цього кроку методи класу довелося б копіювати в кожен екземпляр об'єкта, що витрачало б гігабайти оперативної пам'яті для великих масивів."
+                },
+                action: () => {
+                    setAlgActive('algStep2');
+                    document.getElementById('objNew').classList.add('visible');
+                    document.getElementById('rowProto').innerHTML = '<span>[[Prototype]]:</span> <span class="pointer">0xPROTO</span>';
+                    document.getElementById('rowName').style.display = 'none';
+                }
+            },
+            {
+                codeLine: 'line3',
+                narration: {
+                    title: "Крок 3: Execution (Тіло конструктора)",
+                    what: "Тіло функції User constructor викликається, а ключове слово 'this' прив'язується до нашого нового об'єкта 0xINST1.",
+                    why: "Оператор new використовує Call прив'язку для запуску функції з фіксованим контекстом. Коли ми робимо this.name = 'Artur', ми модифікуємо сам об'єкт 0xINST1.",
+                    insight: "Властивості, задані через this, стають 'Own Properties' (доступні через hasOwnProperty). А всі методи, описані у класі, залишаються у прототипі."
+                },
+                action: () => {
+                    setAlgActive('algStep3');
+                    document.getElementById('rowName').style.display = 'flex';
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Крок 4: Return 'this'",
+                    what: "Функція неявно повертає повністю сформований об'єкт this (0xINST1) і присвоює його змінній 'user'.",
+                    why: "За стандартом, якщо конструктор повертає примітив (наприклад, return 10;) - це ігнорується, і все одно повертається this. Якщо він поверне інший об'єкт (return {a: 1}) - this втратиться.",
+                    insight: "Синтаксичний цукор (class) робить код чистим, але під капотом це класична магія 'new' зразка ES3 1999 року."
+                },
+                action: () => {
+                    setAlgActive('algStep4');
+                    document.getElementById('objNew').style.borderColor = '#98c379'; // Success glow
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
