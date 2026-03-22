@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Prototype Chain Lookup: [[Get]]</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .val-num { color: #d19a66; } /* Числа */
+        .val-str { color: #98c379; } /* Рядки */
+        .pointer { color: #c678dd; font-weight: bold; } /* Адреси Heap */
+        
+        .slot-zone { margin-bottom: 10px; padding: 10px; border: 1px solid #3e4451; border-radius: 4px; background: #282c34; position: relative;}
+        .slot-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #abb2bf; text-transform: uppercase; }
+        
+        /* Objects */
+        .obj-box { border: 2px solid #61afef; border-radius: 6px; padding: 12px; margin-bottom: 20px; background: #2c313a; transition: all 0.3s ease; }
+        .obj-box.active { border-color: #98c379; box-shadow: 0 0 10px rgba(152, 195, 121, 0.4); transform: scale(1.02); }
+        .obj-box.miss { border-color: #e06c75; }
+        .obj-header { font-weight: bold; color: #e5c07b; margin-bottom: 8px; font-family: monospace; }
+        .obj-row { display: flex; justify-content: space-between; font-family: monospace; font-size: 14px; margin-bottom: 4px; color: #abb2bf; }
+        
+        /* Arrow */
+        .proto-arrow { text-align: center; color: #c678dd; font-size: 24px; line-height: 10px; margin: -10px 0 10px 0; }
+        .link-text { font-size: 12px; font-family: monospace; background: #1e2227; padding: 2px 6px; border-radius: 4px; position: relative; top: -14px;}
+        
+        .op-state { padding: 10px; background: #1e2227; border-left: 3px solid #61afef; margin-bottom: 20px; font-family: monospace; color: #fff;}
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Prototype Chain Lookup: [[Get]]</h2>
+    <p>Рекурсивний підйом по ланцюжку прототипів</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 8</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">parent</span> <span class="op">=</span> { <span class="var">greet</span>: <span class="val-str">'Hello'</span> };</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span><span class="kw">const</span> <span class="var">child</span> <span class="op">=</span> <span class="kw">Object</span>.<span class="fn">create</span>(<span class="var">parent</span>);</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span></div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span><span class="fn">console.log</span>(<span class="var">child</span>.<span class="var">greet</span>);</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="fn">console.log</span>(<span class="var">child</span>.<span class="fn">toString</span>());</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span><span class="fn">console.log</span>(<span class="var">child</span>.<span class="var">nonExistent</span>);</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: HEAP (Ланцюжок) -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Heap Memory (Prototype Chain)</div>
+            
+            <div class="op-state" id="opStatus">
+                Status: Idle
+            </div>
+            
+            <div class="js-lab-stack-container" id="stack" style="padding: 10px;">
+                
+                <!-- Child Object -->
+                <div class="obj-box" id="objChild">
+                    <div class="obj-header">child Object [0xOBJ2]</div>
+                    <div class="obj-row"><span>[[Prototype]]:</span> <span class="pointer">0xOBJ1</span></div>
+                    <div class="obj-row" style="color: #4b5363; font-style: italic;">(No own properties)</div>
+                </div>
+                
+                <div class="proto-arrow">↑<br><span class="link-text">Delegation Link</span></div>
+                
+                <!-- Parent Object -->
+                <div class="obj-box" id="objParent">
+                    <div class="obj-header">parent Object [0xOBJ1]</div>
+                    <div class="obj-row"><span>[[Prototype]]:</span> <span class="pointer">Object.proto</span></div>
+                    <div class="obj-row"><span>greet:</span> <span class="val-str">'Hello'</span></div>
+                </div>
+                
+                <div class="proto-arrow">↑<br><span class="link-text">Inherited by syntax `{}`</span></div>
+                
+                <!-- Object.prototype -->
+                <div class="obj-box" id="objProto">
+                    <div class="obj-header">Object.prototype [0xPROTO]</div>
+                    <div class="obj-row"><span>[[Prototype]]:</span> <span class="pointer" style="color: #e06c75;">null</span></div>
+                    <div class="obj-row"><span>toString:</span> <span class="val-str">&lt;function&gt;</span></div>
+                    <div class="obj-row"><span>hasOwnProperty:</span> <span class="val-str">&lt;function&gt;</span></div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setStatus(text, color = '#61afef') {
+        const el = document.getElementById('opStatus');
+        el.innerText = text;
+        el.style.borderLeftColor = color;
+    }
+    
+    function resetObjCSS() {
+        ['objChild', 'objParent', 'objProto'].forEach(id => {
+            document.getElementById(id).className = 'obj-box';
+        });
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: null,
+                narration: {
+                    title: "Ініціалізація Heap-пам'яті",
+                    what: "Створено об'єкти parent та child. Їх зв'язано через [[Prototype]].",
+                    why: "Object.create(parent) створює новий порожній об'єкт (child) і явно встановлює його [[Prototype]] на об'єкт parent.",
+                    insight: "Навіть parent має свій прихований [[Prototype]], оскільки він був створений через синтаксис `{}` (літерал об'єкта) - він дивиться на Object.prototype."
+                },
+                action: () => {
+                    resetObjCSS();
+                    setStatus("Status: Objects created in Heap");
+                }
+            },
+            {
+                codeLine: 'line4',
+                narration: {
+                    title: "Запит 1: child.greet",
+                    what: "Виклик внутрішньої операції [[Get]](child, 'greet'). Крок 1: Пошук у власному словнику (own properties).",
+                    why: "Спочатку рушій запитує у об'єкта child: чи маєш ти властивість під назвою 'greet'?",
+                    insight: "Оператор крапка (.) - це насправді тригер для алгоритму [[Get]]."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objChild').classList.add('miss');
+                    setStatus("[[Get]](child, 'greet') → hasOwnProperty? NO", '#e06c75');
+                }
+            },
+            {
+                codeLine: 'line4',
+                narration: {
+                    title: "Запит 1: Делегація до Parent",
+                    what: "Не знайшовши властивості у child, рушій переходить за посиланням [[Prototype]] до parent і повторює запит.",
+                    why: "Це і є прототипне делегування. Якщо я не знаю - я питаю свого батька.",
+                    insight: "У parent властивість 'greet' знайдена (Data Descriptor). Рушій радісно повертає значення 'Hello' і закінчує пошук."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objParent').classList.add('active');
+                    setStatus("[[Get]](parent, 'greet') → FOUND 'Hello'", '#98c379');
+                }
+            },
+            {
+                codeLine: 'line5',
+                narration: {
+                    title: "Запит 2: child.toString()",
+                    what: "Виклик [[Get]](child, 'toString'). Пошук у child не дав результату.",
+                    why: "У child немає такої властивості.",
+                    insight: "Жодних панік, піднімаємось вище."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objChild').classList.add('miss');
+                    setStatus("[[Get]](child, 'toString') → NO", '#e06c75');
+                }
+            },
+            {
+                codeLine: 'line5',
+                narration: {
+                    title: "Запит 2: Делегація до Parent (Знову мимо)",
+                    what: "Пошук у parent також не дав результату.",
+                    why: "Словник parent містить лише 'greet' і приховані методи, але не 'toString'.",
+                    insight: "Ми не зупиняємось. Переходимо за [[Prototype]] об'єкта parent (це Object.prototype)."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objParent').classList.add('miss');
+                    setStatus("[[Get]](parent, 'toString') → NO", '#e06c75');
+                }
+            },
+            {
+                codeLine: 'line5',
+                narration: {
+                    title: "Запит 2: Object.prototype",
+                    what: "Знайдено 'toString' на верхівці ієрархії.",
+                    why: "Object.prototype - це об'єкт-моноліт, утворений мовою, що містить базові інструменти. Функцію знайдено і вона повертається.",
+                    insight: "Цікавий факт: this всередині toString буде вказувати на child, а не на Object.prototype. Рушій зберігає початковий контекст виклику (Receiver)."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objProto').classList.add('active');
+                    setStatus("[[Get]](Object.prototype, 'toString') → FOUND <function>", '#98c379');
+                }
+            },
+            {
+                codeLine: 'line6',
+                narration: {
+                    title: "Запит 3: child.nonExistent",
+                    what: "Виклик [[Get]] для вигаданої властивості. Пробігаємо child і parent...",
+                    why: "Рушій швидко скролить кеші (Inline Caches), щоб перевірити наявність властивості.",
+                    insight: "Читання неіснуючих властивостей є найповільнішою дією, адже маємо обійти абсолютно весь ланцюг до самого кінця."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objChild').classList.add('miss');
+                    document.getElementById('objParent').classList.add('miss');
+                    setStatus("[[Get]](... 'nonExistent') → traversing chain", '#e5c07b');
+                }
+            },
+            {
+                codeLine: 'line6',
+                narration: {
+                    title: "Кінець ланцюга (null)",
+                    what: "Object.prototype також не містить 'nonExistent'. Його [[Prototype]] дорівнює null. Пошук завершується, повертається undefined.",
+                    why: "За специфікацією, якщо наступний [[Prototype]] є null (кінцева точка), алгоритм [[Get]] капітулює і видає undefined.",
+                    insight: "Різниця між undefined і ReferenceError велика: для змінних без let/const буде ReferenceError, але для об'єктових властивостей мова пробачає нас і видає undefined."
+                },
+                action: () => {
+                    resetObjCSS();
+                    document.getElementById('objProto').classList.add('miss');
+                    setStatus("[[Get]](null, 'nonExistent') → Return undefined", '#e06c75');
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
