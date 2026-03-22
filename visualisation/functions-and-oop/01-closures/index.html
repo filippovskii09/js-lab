@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>Closures & Environment Reference</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .val-num { color: #d19a66; } /* Числа */
+        .val-str { color: #98c379; } /* Рядки */
+        .pointer { color: #c678dd; font-weight: bold; } /* Адреси Heap */
+        
+        .slot-zone { margin-bottom: 10px; padding: 10px; border: 1px solid #3e4451; border-radius: 4px; background: #282c34; }
+        .slot-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #abb2bf; text-transform: uppercase; }
+        .slot-link { display: inline-block; padding: 2px 6px; background: #c678dd20; border: 1px solid #c678dd; border-radius: 3px; font-family: monospace; }
+        
+        /* Specific Env Styles */
+        .env-block { border: 1px solid #61afef; padding: 10px; margin-bottom: 10px; background: #1e2227; transition: opacity 0.3s; }
+        .env-block.inactive { opacity: 0.3; border-style: dashed; }
+        .env-block.heap { border-color: #e5c07b; background: #2c2116; }
+        .env-header { color: #61afef; font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #3e4451; padding-bottom: 4px; }
+        .env-row { display: flex; justify-content: space-between; font-family: monospace; font-size: 14px; color: #abb2bf; margin-bottom: 4px; }
+        
+        #stackArea { border-right: 2px dashed #4b5363; padding-right: 15px; }
+        #heapArea { padding-left: 15px; }
+        .memory-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>Closures & Environment Reference</h2>
+    <p>Visualizing Lexical Environment survival in the Heap</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 5</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">function</span> <span class="fn">makeCounter</span>() {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="kw">let</span> <span class="var">count</span> <span class="op">=</span> <span class="val-num">0</span>;</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="kw">return</span> <span class="kw">function</span> <span class="fn">counter</span>() {</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>    <span class="kw">return</span> <span class="op">++</span><span class="var">count</span>;</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span>  };</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span>}</div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="kw">const</span> <span class="var">myCounter</span> <span class="op">=</span> <span class="fn">makeCounter</span>();</div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="fn">console.log</span>(<span class="fn">myCounter</span>());</div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: ПАМ'ЯТЬ -->
+        <div class="js-lab-stack">
+            <div class="memory-layout">
+                <!-- СТЕК -->
+                <div id="stackArea">
+                    <div class="js-lab-stack-title">Call Stack</div>
+                    
+                    <div class="env-block" id="globalEnv" style="display: none;">
+                        <div class="env-header">Global Execution Context</div>
+                        <div class="env-row"><span>myCounter:</span> <span id="vMyCounter" class="pointer">&lt;uninitialized&gt;</span></div>
+                        <div class="env-row"><span>makeCounter:</span> <span class="pointer">0xFUNC1</span></div>
+                    </div>
+                    
+                    <div class="env-block" id="makeCounterCtx" style="display: none;">
+                        <div class="env-header">makeCounter() Context</div>
+                        <div class="env-row"><span>count:</span> <span id="vCountStack" class="val-num">0</span></div>
+                        <div class="env-row"><span>[[OuterEnv]]:</span> <span>Global</span></div>
+                    </div>
+                    
+                    <div class="env-block" id="counterCtx" style="display: none;">
+                        <div class="env-header">counter() Context</div>
+                        <div class="env-row" style="color: #61afef;"><span>(empty block)</span></div>
+                        <div class="env-row"><span>[[OuterEnv]]:</span> <span class="pointer" style="text-decoration: underline;">0xENV1</span></div>
+                    </div>
+                </div>
+                
+                <!-- ХІП -->
+                <div id="heapArea">
+                    <div class="js-lab-stack-title">Heap Memory</div>
+                    
+                    <div class="env-block heap" id="funcObj1" style="display: none;">
+                        <div class="env-header" style="color: #e5c07b;">Function Object: makeCounter</div>
+                        <div class="env-row"><span>[[Environment]]:</span> <span>Global</span></div>
+                        <div class="env-row"><span>Code:</span> <span>...</span></div>
+                    </div>
+                    
+                    <div class="env-block heap" id="makeCounterEnvHeap" style="display: none;">
+                        <div class="env-header" style="color: #e5c07b;">Lexical Env [0xENV1]</div>
+                        <div class="env-row"><span>count:</span> <span id="vCountHeap" class="val-num">0</span></div>
+                        <div class="env-row"><span>[[OuterEnv]]:</span> <span>Global</span></div>
+                    </div>
+                    
+                    <div class="env-block heap" id="funcObj2" style="display: none;">
+                        <div class="env-header" style="color: #e5c07b;">Function Object: counter</div>
+                        <div class="env-row"><span>[[Environment]]:</span> <span class="pointer">0xENV1</span></div>
+                        <div class="env-row"><span>Code:</span> <span>return ++count;</span></div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setDisplay(id, show) {
+        document.getElementById(id).style.display = show ? 'block' : 'none';
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Початковий стан: Виклик makeCounter()",
+                    what: "Виконується Global Context. Рушій викликає функцію makeCounter().",
+                    why: "Перш ніж призначити змінну myCounter, необхідно виконати функцію і отримати те, що вона поверне (Return Value).",
+                    insight: "Оголошення функції makeCounter (0xFUNC1) вже сидить у Heap. Зараз ми створюємо новий Execution Context на Call Stack."
+                },
+                action: () => {
+                    setDisplay('globalEnv', true);
+                    setDisplay('makeCounterCtx', true);
+                    setDisplay('funcObj1', true);
+                    
+                    setDisplay('makeCounterEnvHeap', false);
+                    setDisplay('funcObj2', false);
+                    setDisplay('counterCtx', false);
+                    document.getElementById('makeCounterCtx').classList.remove('inactive');
+                    
+                    document.getElementById('vMyCounter').innerText = '<uninitialized>';
+                }
+            },
+            {
+                codeLine: 'line3',
+                narration: {
+                    title: "Оголошення Closure (вкладеної функції)",
+                    what: "Рушій створює Function Object для counter() і записує його в Heap. Для нього встановлюється приховане посилання [[Environment]].",
+                    why: "Згідно специфікації, під час створення функції поточний Lexical Environment (середовище makeCounter) запам'ятовується назавжди всередині її [[Environment]].",
+                    insight: "V8 (Context Allocation): V8 бачить, що змінна `count` використовується дочірньою функцією, тому середовище (0xENV1) переноситься з тимчасового стеку до постійної Heap-пам'яті."
+                },
+                action: () => {
+                    setDisplay('makeCounterEnvHeap', true);
+                    setDisplay('funcObj2', true);
+                    document.getElementById('makeCounterCtx').classList.add('inactive'); // Moved to heap metaphor
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Завершення makeCounter (Stack Pop)",
+                    what: "makeCounter() повертає об'єкт функції counter. Execution Context видаляється зі стеку.",
+                    why: "Функція виконалася (Return Value повернуто). Всі локальні ресурси на стеку зачищаються.",
+                    insight: "АЛЕ! Lexical Environment (0xENV1) залишився в Heap! Чому? Бо на нього вказує об'єкт funcObj2, який тепер зберігається у змінній myCounter. Garbage Collector не може це видалити."
+                },
+                action: () => {
+                    setDisplay('makeCounterCtx', false); // Popped
+                    document.getElementById('vMyCounter').innerText = '0xFUNC2';
+                }
+            },
+            {
+                codeLine: 'line8',
+                narration: {
+                    title: "Виклик замикання: myCounter()",
+                    what: "Ми викликаємо повернуту функцію. Створюється новий Execution Context. [[OuterEnv]] встановлюється в 0xENV1.",
+                    why: "Коли функція виконується, її Зовнішнє Середовище (Scope Chain) встановлюється за значенням збереженого [[Environment]], яке в неї запаковано.",
+                    insight: "Функція поводить себе так, наче makeCounter ніколи не завершувалась. Це суть Замикання (Closure)."
+                },
+                action: () => {
+                    setDisplay('counterCtx', true);
+                    document.getElementById('vCountHeap').innerText = '0';
+                }
+            },
+            {
+                codeLine: 'line4',
+                narration: {
+                    title: "Мутація стану: ++count",
+                    what: "Операція ++count знаходить змінну у 0xENV1 (Heap) і мутує її значення на 1.",
+                    why: "У Scope Chain змінна шукається локально (немає), а потім - в [[OuterEnv]] (0xENV1). Зміна відбувається безпосередньо в середовищі-замиканні.",
+                    insight: "Якщо ми викличемо функцію знову, вона буде мати доступ до значення 1, а не 0. Функції зберігають свій стан між викликами."
+                },
+                action: () => {
+                    document.getElementById('vCountHeap').innerText = '1';
+                    document.getElementById('vCountHeap').style.color = '#98c379';
+                    document.getElementById('vCountHeap').style.fontWeight = 'bold';
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
