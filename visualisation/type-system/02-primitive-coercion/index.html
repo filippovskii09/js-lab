@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>ToPrimitive Algorithm</title>
+    <!-- 1. Підключаємо глобальну тему з Core -->
+    <link rel="stylesheet" href="../../core/theme.css">
+    <style>
+        .op { color: #56b6c2; } /* Оператори */
+        .val-obj { color: #c678dd; } /* Об'єкти */
+        .val-num { color: #d19a66; } /* Числа */
+        .val-str { color: #98c379; } /* Рядки */
+        
+        .slot-zone { margin-bottom: 10px; padding: 10px; border: 1px solid #3e4451; border-radius: 4px; background: #282c34; }
+        .slot-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #abb2bf; text-transform: uppercase; }
+        
+        #exprState { display: flex; flex-direction: column; gap: 10px; font-family: monospace; font-size: 16px; margin-top: 20px;}
+        .expr-step { padding: 10px; border-left: 3px solid #61afef; background: #1e2227; color: #abb2bf; border-radius: 2px;}
+        .expr-step.active { border-color: #c678dd; background: #2c313a; color: #fff; font-weight: bold; }
+        .expr-step.error { border-color: #e06c75; color: #e06c75; }
+    </style>
+</head>
+<body>
+
+<div class="js-lab-header">
+    <h2>ToPrimitive Algorithm (Object vs Date)</h2>
+    <p>Абстрактна операція перетворення об'єктів у примітиви</p>
+</div>
+
+<div class="js-lab-controls">
+    <button id="btnPrev" class="js-lab-btn" disabled>◄ Назад</button>
+    <div class="js-lab-step-info" id="stepInfo">Крок 1 / 6</div>
+    <button id="btnNext" class="js-lab-btn">Далі ►</button>
+</div>
+
+<div class="js-lab-app">
+    <div class="js-lab-top-row">
+        <!-- ЛІВИЙ БЛОК: КОД -->
+        <div class="js-lab-code">
+            <div class="js-lab-line" id="line1"><span class="js-lab-line-num">1</span><span class="kw">const</span> <span class="var">obj</span> <span class="op">=</span> {</div>
+            <div class="js-lab-line" id="line2"><span class="js-lab-line-num">2</span>  <span class="fn">valueOf</span>() { <span class="kw">return</span> <span class="val-num">42</span>; },</div>
+            <div class="js-lab-line" id="line3"><span class="js-lab-line-num">3</span>  <span class="fn">toString</span>() { <span class="kw">return</span> <span class="val-str">"box"</span>; }</div>
+            <div class="js-lab-line" id="line4"><span class="js-lab-line-num">4</span>};</div>
+            <div class="js-lab-line" id="line5"><span class="js-lab-line-num">5</span><span class="kw">const</span> <span class="var">d</span> <span class="op">=</span> <span class="kw">new</span> <span class="fn">Date</span>();</div>
+            <div class="js-lab-line" id="line6"><span class="js-lab-line-num">6</span></div>
+            <div class="js-lab-line" id="line7"><span class="js-lab-line-num">7</span><span class="fn">console.log</span>(<span class="var">obj</span> <span class="op">+</span> <span class="val-num">1</span>); <span class="com">// ?</span></div>
+            <div class="js-lab-line" id="line8"><span class="js-lab-line-num">8</span><span class="fn">console.log</span>(<span class="var">d</span> <span class="op">+</span> <span class="val-num">1</span>);   <span class="com">// ?</span></div>
+        </div>
+
+        <!-- ПРАВИЙ БЛОК: СТЕК/АЛГОРИТМ -->
+        <div class="js-lab-stack">
+            <div class="js-lab-stack-title">Алгоритм ToPrimitive</div>
+            <div class="js-lab-stack-container" id="stack">
+                <div class="slot-zone">
+                    <div class="slot-title">Поточна операція:</div>
+                    <div id="equationDisplay" style="font-size: 20px; font-family: monospace; text-align: center; padding: 20px 0; color: #fff;">
+                        obj + 1
+                    </div>
+                </div>
+                
+                <div id="exprState">
+                    <div class="expr-step" id="step1">1. Виклик ToPrimitive(input, hint)</div>
+                    <div class="expr-step" id="step2">2. hint за замовчуванням === "default"</div>
+                    <div class="expr-step" id="step3">3. Який це об'єкт? (Date виняток)</div>
+                    <div class="expr-step" id="step4">4. Спочатку викликаємо valueOf()</div>
+                    <div class="expr-step" id="step5">5. Спочатку викликаємо toString()</div>
+                    <div class="expr-step" id="step6">6. Результат математики</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- НИЖНІЙ БЛОК: ПАНЕЛЬ АНАЛІЗУ -->
+    <div class="js-lab-analysis" id="analysis-log">
+        <h3 id="analysis-title">Title Here</h3>
+        <div id="analysis-body" class="log-wrapper fade-in">
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Дія (What):</span>
+                <span class="js-lab-log-content" id="log-what"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Причина (Why):</span>
+                <span class="js-lab-log-content" id="log-why"></span>
+            </div>
+            <div class="js-lab-log-item">
+                <span class="js-lab-log-label">Висновок:</span>
+                <span class="js-lab-log-content" id="log-insight" style="color: var(--log-accent); font-weight: bold;"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { JSLabEngine } from '../../core/engine.js';
+
+    function setActiveStep(id, eq) {
+        document.querySelectorAll('.expr-step').forEach(el => el.classList.remove('active'));
+        if(id) document.getElementById(id).classList.add('active');
+        document.getElementById('equationDisplay').innerText = eq;
+    }
+
+    const config = {
+        steps: [
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Початковий стан: obj + 1",
+                    what: "Оператор додавання (+) зустрічає об'єкт зліва.",
+                    why: "Бінарний '+' викликає ToPrimitive(obj) з підказкою (hint) за замовчуванням 'default', оскільки плюс використовується і для додавання чисел, і для конкатенації рядків.",
+                    insight: "Не плутати з унарним плюсом (+obj), який завжди посилає hint 'number'."
+                },
+                action: () => {
+                    setActiveStep('step1', "obj + 1");
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Стандартний об'єкт: hint 'default' === 'number'",
+                    what: "Для більшості об'єктів hint 'default' перетворюється на 'number'.",
+                    why: "Специфікація каже, що якщо об'єкт не Date, його дефолтний hint примусово стає number. Це означає, що пріоритетним методом є valueOf().",
+                    insight: "JavaScript віддає перевагу математиці над об'єктами за замовчуванням."
+                },
+                action: () => {
+                    document.getElementById('step2').classList.add('active');
+                    setActiveStep('step3', "hint === 'number'");
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Виклик пріоритетного методу: valueOf()",
+                    what: "Рушій викликає obj.valueOf(). Метод повертає число 42.",
+                    why: "Оскільки hint 'number', рушій викликає valueOf(). Результат (42) перевіряється: чи це примітив? Так, це число. Алгоритм успішно завершується.",
+                    insight: "Якби valueOf повернув об'єкт (наприклад {}), алгоритм відкатився б і викликав toString()."
+                },
+                action: () => {
+                    document.getElementById('step4').classList.add('active');
+                    setActiveStep('step6', "42 + 1");
+                }
+            },
+            {
+                codeLine: 'line7',
+                narration: {
+                    title: "Фінальний результат для obj",
+                    what: "Тепер ми складаємо 42 + 1 = 43.",
+                    why: "Обидва операнди є специфічними примітивами (числами), тому виконується математичне додавання.",
+                    insight: "Змішування типів завжди зводиться до найпростіших лінійних операцій на рівні байткоду (Ignition)."
+                },
+                action: () => {
+                    setActiveStep('step6', "43");
+                }
+            },
+            {
+                codeLine: 'line8',
+                narration: {
+                    title: "Виняток Date: d + 1",
+                    what: "Перемикаємось на об'єкт Date. Крок 1: ToPrimitive(d) з hint 'default'.",
+                    why: "Оператор '+' так само викликає ToPrimitive з 'default'. АЛЕ Date є єдиним внутрішнім обсягом в JS, який обробляє 'default' інакше.",
+                    insight: "Дизайн Date був створений Бренданом Айком так, щоб об'єкти дати легше конкатенувались у рядки."
+                },
+                action: () => {
+                    setActiveStep('step1', "d + 1");
+                }
+            },
+            {
+                codeLine: 'line8',
+                narration: {
+                    title: "Date: hint 'default' === 'string'",
+                    what: "Для об'єктів Date 'default' перетворюється на 'string'.",
+                    why: "Це означає, що пріоритетним методом для виклику стає не valueOf(), а toString(), тому що Date надає перевагу рядковому представленню.",
+                    insight: "Date + 1 і Date - 1 роблять абсолютно різні речі. '+' викликає toString(), '-' вимагає number і викликає valueOf()!"
+                },
+                action: () => {
+                    document.getElementById('step2').classList.add('active');
+                    setActiveStep('step3', "hint === 'string'");
+                }
+            },
+            {
+                codeLine: 'line8',
+                narration: {
+                    title: "Виклик пріоритетного методу: toString()",
+                    what: "Рушій викликає d.toString(). Він повертає довгий рядок на кшталт 'Thu May 16 2026...'",
+                    why: "Оскільки hint 'string', першим іде toString(). Результат є примітивом (рядком).",
+                    insight: "Цим алгоритмам байдуже на логіку, вони сліпо йдуть чергою методів 'valueOf або toString'."
+                },
+                action: () => {
+                    document.getElementById('step5').classList.add('active');
+                    setActiveStep('step6', "'Thu May 16...' + 1");
+                }
+            },
+            {
+                codeLine: 'line8',
+                narration: {
+                    title: "Конкатенація Date",
+                    what: "Рядок об'єднується з числом: 'Thu May 16 2026...1'",
+                    why: "Оскільки один з операндів у '+' є рядком, інший операнд також примусово проганяється через ToString(1) -> '1', і відбувається конкатенація.",
+                    insight: "Розуміння ToPrimitive пояснює 80% проблем типу '[object Object]' на UI."
+                },
+                action: () => {
+                    setActiveStep('step6', "'Thu May 16 ...1'");
+                }
+            }
+        ]
+    };
+
+    const engine = new JSLabEngine(config);
+    engine.init();
+</script>
+
+</body>
+</html>
